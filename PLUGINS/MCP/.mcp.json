@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "asp": {
-      "transport": "sse",
-      "url": "${ASP_MCP_URL}"
-    }
-  }
-}

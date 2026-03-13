@@ -5,49 +5,38 @@ from PLUGINS.SIRP.sirpapi import Case
 from PLUGINS.SIRP.sirpmodel import CaseModel, Severity, CaseStatus
 
 
-def get_case(case_id: Annotated[str, "Case Id"]):
-    """
-    Retrieve a security case by its Case ID (e.g. case_000005)
-
-    Args:
-        case_id: The case identifier string.
-
-    Returns:
-        The Case object if found, otherwise None.
-    """
+def get_case(
+        case_id: Annotated[str, "Case ID, for example case_000005"]
+) -> Annotated[Optional[str], "AI-friendly JSON string of the case, or None if the case does not exist"]:
+    """Retrieve a security case by case ID."""
     model = Case.get_by_case_id(case_id)
+    if not model:
+        return None
     result = model.model_dump_json_for_ai()
     return result
 
 
 def list_cases(
-        status: Annotated[Optional[str], "Filter by case status"] = None,
-        severity: Annotated[Optional[str], "Filter by severity level"] = None,
+        status: Annotated[Optional[list[CaseStatus]], "Filter by case status or a list of case statuses"] = None,
+        severity: Annotated[Optional[list[Severity]], "Filter by severity level or a list of severity levels"] = None,
         limit: Annotated[int, "Maximum number of results to return"] = 10
-):
-    """
-    List security cases with optional filters.
-
-    Args:
-        status: Filter cases by status (e.g., 'New', 'In Progress', 'Closed')
-        severity: Filter cases by severity (e.g., 'Critical', 'High', 'Medium', 'Low')
-        limit: Maximum number of cases to return (default: 10)
-
-    Returns:
-        List of Case objects matching the filters.
-    """
+) -> Annotated[list[dict], "Security cases matching the filters"]:
+    """List security cases with optional filters."""
     conditions = []
 
     if status:
-        conditions.append(Condition(field="status", operator=Operator.EQ, value=status))
+        conditions.append(Condition(field="status", operator=Operator.IN, value=status))
 
     if severity:
-        conditions.append(Condition(field="severity", operator=Operator.EQ, value=severity))
+        conditions.append(Condition(field="severity", operator=Operator.IN, value=severity))
 
     filter_model = Group(logic="AND", children=conditions) if conditions else Group(logic="AND", children=[])
 
-    results = Case.list(filter_model)
-    return results[:limit]
+    models = Case.list(filter_model)
+    result = []
+    for model in models[:limit]:
+        result.append(model.model_dump_json_for_ai())
+    return result
 
 
 def create_case(
@@ -55,19 +44,8 @@ def create_case(
         severity: Annotated[str, "Severity level: Critical, High, Medium, Low, Info"],
         description: Annotated[str, "Case description"] = "",
         status: Annotated[str, "Case status"] = "New"
-):
-    """
-    Create a new security case.
-
-    Args:
-        title: The title of the case
-        severity: Severity level (Critical, High, Medium, Low, Info)
-        description: Detailed description of the case
-        status: Initial status (default: New)
-
-    Returns:
-        The created Case object with its assigned rowid.
-    """
+) -> Annotated[str, "Row ID of the created case"]:
+    """Create a new security case."""
     case_model = CaseModel(
         title=title,
         severity=Severity(severity),
@@ -83,20 +61,8 @@ def update_case(
         severity: Annotated[Optional[str], "New severity"] = None,
         status: Annotated[Optional[str], "New status"] = None,
         description: Annotated[Optional[str], "New description"] = None
-):
-    """
-    Update an existing security case.
-
-    Args:
-        case_id: The case ID to update
-        title: New title (optional)
-        severity: New severity level (optional)
-        status: New status (optional)
-        description: New description (optional)
-
-    Returns:
-        The updated Case object.
-    """
+) -> Annotated[Optional[str], "Row ID of the updated case, or None if the case does not exist"]:
+    """Update an existing security case."""
     case = Case.get_by_case_id(case_id)
     if not case:
         return None
@@ -120,6 +86,6 @@ if __name__ == "__main__":
     import django
 
     django.setup()
-    result = get_case("case_000005")
-    result = list_cases()
+    # result = get_case("case_000005")
+    result = list_cases(status=[CaseStatus.IN_PROGRESS])
     print(result)

@@ -504,3 +504,14 @@ class OptionSet(object):
                     if option["value"] == value:
                         return option["key"]
         raise Exception(f"optionset {name} {value} not found")
+
+
+if __name__ == "__main__":
+    import os
+
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ASP.settings")
+    import django
+
+    django.setup()
+    result = WorksheetRow.get_discussions("case", "55c0ac33-65c2-420d-8e90-3ac62ca46f85")
+    print(result)

@@ -188,3 +188,4 @@ PLAYBOOKS/Debug_*
 DATA/Debug_*/
 PLUGINS/Embeddings/db/*
 
+.claude/*
