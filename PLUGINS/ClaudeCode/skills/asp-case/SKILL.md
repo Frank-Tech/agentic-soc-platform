@@ -9,7 +9,6 @@ metadata:
   category: cyber security
   tags: [ case-management, soc ]
   documentation: https://asp.viperrtp.com/
-allowed-tools: [ "*" ]
 ---
 
 # ASP Case

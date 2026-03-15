@@ -100,7 +100,8 @@ def siem_keyword_search(
 
 def get_current_time(
         time_format: Annotated[
-            Optional[str], "Optional datetime format string. If not provided, returns ISO 8601 time with timezone information accurate to seconds"] = None
+            Optional[str], "Optional datetime format string (e.g. '%Y/%m/%d %H:%M:%S' '%Y-%m-%dT%H:%M:%SZ'). "
+                           "If not provided, returns ISO 8601 time with timezone information accurate to seconds"] = None
 ) -> Annotated[str, "Current system time string with timezone information"]:
     current_time = datetime.now().astimezone()
     if time_format:
@@ -115,7 +116,7 @@ if __name__ == "__main__":
     import django
 
     django.setup()
-    print(get_current_system_time())
+    print(get_current_time())
     time_range_end = datetime.now(timezone.utc)
     time_range_start = time_range_end - timedelta(minutes=10)
     siem_results = siem_keyword_search(
