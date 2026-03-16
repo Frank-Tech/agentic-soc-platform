@@ -7,7 +7,7 @@ metadata:
   version: 0.1.0
   mcp-server: asp
   category: cyber security
-  tags: [ siem, search, soc ]
+  tags: [ SIEM, search, SOC ]
   documentation: https://asp.viperrtp.com/
 ---
 

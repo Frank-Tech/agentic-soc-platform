@@ -37,7 +37,7 @@ def list_cases(
 
     filter_model = Group(logic="AND", children=conditions) if conditions else Group(logic="AND", children=[])
 
-    models = Case.list(filter_model)
+    models = Case.list(filter_model, lazy_load=True)
     result = []
     for model in models[:limit]:
         result.append(model.model_dump_json_for_ai())
@@ -104,7 +104,7 @@ def siem_keyword_search(
 
 def get_current_time(
         time_format: Annotated[
-            Optional[str], "Optional datetime format string (e.g. '%Y/%m/%d %H:%M:%S' '%Y-%m-%dT%H:%M:%SZ'). "
+            Optional[str], "Optional datetime format string,used by python strftime (e.g. '%Y/%m/%d %H:%M:%S' '%Y-%m-%dT%H:%M:%SZ'). "
                            "If not provided, returns ISO 8601 time with timezone information accurate to seconds"] = None
 ) -> Annotated[str, "Current system time string with timezone information"]:
     current_time = datetime.now().astimezone()
