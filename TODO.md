@@ -38,8 +38,9 @@
 
 1. 继续统一 MCP 列表接口的公共参数与返回风格
 2. 收口 `list_*` 类接口中的重复过滤与序列化逻辑
-3. 继续统一 `target_type + target_id` 风格的 MCP 接口设计
-4. 明确对象 ID、运行记录 ID、定义名三类标识的命名边界
+3. 继续统一 `create_* + attach_*` 两步式 MCP 接口命名与描述文字
+4. 在统一路由接口中继续统一 `target_type + target_id` 风格
+5. 明确对象 ID、记录 row ID、运行记录 ID、定义名四类标识的命名边界
 
 ### 3.2 Playbook
 

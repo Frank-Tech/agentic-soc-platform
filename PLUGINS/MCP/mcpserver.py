@@ -39,8 +39,11 @@ if __name__ == "__main__":
 
     # add tools
     from PLUGINS.MCP.llmfunc import (
-        append_artifact,
-        append_enrichment,
+        attach_artifact_to_alert,
+        attach_enrichment_to_target,
+        attach_ticket_to_case,
+        create_artifact,
+        create_enrichment,
         create_ticket,
         execute_playbook,
         get_alert_discussions,
@@ -62,8 +65,11 @@ if __name__ == "__main__":
         get_current_time,
     )
 
-    mcp.add_tool(append_artifact)
-    mcp.add_tool(append_enrichment)
+    mcp.add_tool(attach_artifact_to_alert)
+    mcp.add_tool(attach_enrichment_to_target)
+    mcp.add_tool(attach_ticket_to_case)
+    mcp.add_tool(create_artifact)
+    mcp.add_tool(create_enrichment)
     mcp.add_tool(create_ticket)
     mcp.add_tool(execute_playbook)
     mcp.add_tool(get_alert_discussions)

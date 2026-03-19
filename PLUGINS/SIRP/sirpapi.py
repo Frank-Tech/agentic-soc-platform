@@ -41,41 +41,7 @@ class Ticket(BaseWorksheetEntity[TicketModel]):
             return None
 
     @classmethod
-    def create_from_sync(
-            cls,
-            uid: str,
-            title: str = "",
-            status=None,
-            type=None,
-            src_url: str = "",
-            case_id: Union[str, None] = None
-    ) -> str:
-        ticket_new = TicketModel()
-        ticket_new.uid = uid
-        ticket_new.title = title
-        ticket_new.status = status
-        ticket_new.type = type
-        ticket_new.src_url = src_url
-
-        rowid = cls.create(ticket_new)
-
-        if case_id:
-            case_old = Case.get_by_id(case_id, lazy_load=True)
-            if not case_old:
-                return rowid
-
-            case_new = CaseModel()
-            case_new.rowid = case_old.rowid
-            tickets = case_old.tickets or []
-            if rowid not in tickets:
-                tickets = [*tickets, rowid]
-            case_new.tickets = tickets
-            Case.update(case_new)
-
-        return rowid
-
-    @classmethod
-    def update_from_sync(
+    def update_by_id(
             cls,
             ticket_id: str,
             uid: Union[str, None] = None,
@@ -145,30 +111,14 @@ class Artifact(BaseWorksheetEntity[ArtifactModel]):
             return None
 
     @classmethod
-    def append_enrichment(
+    def attach_enrichment(
             cls,
             artifact_id: str,
-            name: str = "",
-            type: str = "Other",
-            provider: str = "Other",
-            value: str = "",
-            src_url: str = "",
-            desc: str = "",
-            data: str = ""
+            enrichment_rowid: str
     ) -> Union[str, None]:
         artifact_old = cls.get_by_id(artifact_id, lazy_load=True)
         if not artifact_old:
             return None
-
-        enrichment_new = EnrichmentModel()
-        enrichment_new.name = name
-        enrichment_new.type = type
-        enrichment_new.provider = provider
-        enrichment_new.value = value
-        enrichment_new.src_url = src_url
-        enrichment_new.desc = desc
-        enrichment_new.data = data
-        enrichment_rowid = Enrichment.create(enrichment_new)
 
         existing_enrichments = []
         for enrichment in artifact_old.enrichments or []:
@@ -176,6 +126,9 @@ class Artifact(BaseWorksheetEntity[ArtifactModel]):
                 existing_enrichments.append(enrichment)
             elif enrichment.rowid:
                 existing_enrichments.append(enrichment.rowid)
+
+        if enrichment_rowid in existing_enrichments:
+            return enrichment_rowid
 
         artifact_new = ArtifactModel()
         artifact_new.rowid = artifact_old.rowid
@@ -235,7 +188,7 @@ class Alert(BaseWorksheetEntity[AlertModel]):
             return None
 
     @classmethod
-    def update_ai_fields(
+    def update_by_id(
             cls,
             alert_id: str,
             severity_ai: Union[Severity, None] = None,
@@ -248,11 +201,11 @@ class Alert(BaseWorksheetEntity[AlertModel]):
 
         alert_new = AlertModel()
         alert_new.rowid = alert_old.rowid
-        if severity_ai:
+        if severity_ai is not None:
             alert_new.severity_ai = severity_ai
-        if confidence_ai:
+        if confidence_ai is not None:
             alert_new.confidence_ai = confidence_ai
-        if comment_ai:
+        if comment_ai is not None:
             alert_new.comment_ai = comment_ai
 
         return cls.update(alert_new)
@@ -265,30 +218,14 @@ class Alert(BaseWorksheetEntity[AlertModel]):
         return WorksheetRow.get_discussions(cls.WORKSHEET_ID, alert_model.rowid)
 
     @classmethod
-    def append_artifact(
+    def attach_artifact(
             cls,
             alert_id: str,
-            name: str = "",
-            type=None,
-            role=None,
-            owner: str = "",
-            value: str = "",
-            reputation_provider: str = "",
-            reputation_score=None
+            artifact_rowid: str
     ) -> Union[str, None]:
         alert_old = cls.get_by_id(alert_id, lazy_load=True)
         if not alert_old:
             return None
-
-        artifact_new = ArtifactModel()
-        artifact_new.name = name
-        artifact_new.type = type
-        artifact_new.role = role
-        artifact_new.owner = owner
-        artifact_new.value = value
-        artifact_new.reputation_provider = reputation_provider
-        artifact_new.reputation_score = reputation_score
-        artifact_rowid = Artifact.create(artifact_new)
 
         existing_artifacts = []
         for artifact in alert_old.artifacts or []:
@@ -296,6 +233,9 @@ class Alert(BaseWorksheetEntity[AlertModel]):
                 existing_artifacts.append(artifact)
             elif artifact.rowid:
                 existing_artifacts.append(artifact.rowid)
+
+        if artifact_rowid in existing_artifacts:
+            return artifact_rowid
 
         alert_new = AlertModel()
         alert_new.rowid = alert_old.rowid
@@ -305,30 +245,14 @@ class Alert(BaseWorksheetEntity[AlertModel]):
         return artifact_rowid
 
     @classmethod
-    def append_enrichment(
+    def attach_enrichment(
             cls,
             alert_id: str,
-            name: str = "",
-            type: str = "Other",
-            provider: str = "Other",
-            value: str = "",
-            src_url: str = "",
-            desc: str = "",
-            data: str = ""
+            enrichment_rowid: str
     ) -> Union[str, None]:
         alert_old = cls.get_by_id(alert_id, lazy_load=True)
         if not alert_old:
             return None
-
-        enrichment_new = EnrichmentModel()
-        enrichment_new.name = name
-        enrichment_new.type = type
-        enrichment_new.provider = provider
-        enrichment_new.value = value
-        enrichment_new.src_url = src_url
-        enrichment_new.desc = desc
-        enrichment_new.data = data
-        enrichment_rowid = Enrichment.create(enrichment_new)
 
         existing_enrichments = []
         for enrichment in alert_old.enrichments or []:
@@ -336,6 +260,9 @@ class Alert(BaseWorksheetEntity[AlertModel]):
                 existing_enrichments.append(enrichment)
             elif enrichment.rowid:
                 existing_enrichments.append(enrichment.rowid)
+
+        if enrichment_rowid in existing_enrichments:
+            return enrichment_rowid
 
         alert_new = AlertModel()
         alert_new.rowid = alert_old.rowid
@@ -417,6 +344,44 @@ class Case(BaseWorksheetEntity[CaseModel]):
             return None
 
     @classmethod
+    def update_by_id(
+            cls,
+            case_id: str,
+            severity: Union[Severity, None] = None,
+            status=None,
+            verdict=None,
+            severity_ai: Union[Severity, None] = None,
+            confidence_ai: Union[Confidence, None] = None,
+            attack_stage_ai=None,
+            comment_ai: Union[str, None] = None,
+            summary_ai: Union[str, None] = None
+    ) -> Union[str, None]:
+        case_old = cls.get_by_id(case_id, lazy_load=True)
+        if not case_old:
+            return None
+
+        case_new = CaseModel()
+        case_new.rowid = case_old.rowid
+        if severity is not None:
+            case_new.severity = severity
+        if status is not None:
+            case_new.status = status
+        if verdict is not None:
+            case_new.verdict = verdict
+        if severity_ai is not None:
+            case_new.severity_ai = severity_ai
+        if confidence_ai is not None:
+            case_new.confidence_ai = confidence_ai
+        if attack_stage_ai is not None:
+            case_new.attack_stage_ai = attack_stage_ai
+        if comment_ai is not None:
+            case_new.comment_ai = comment_ai
+        if summary_ai is not None:
+            case_new.summary_ai = summary_ai
+
+        return cls.update(case_new)
+
+    @classmethod
     def get_discussions(cls, case_id) -> Union[List[dict], None]:
         case_model = cls.get_by_id(case_id, lazy_load=True)
         if not case_model:
@@ -424,30 +389,14 @@ class Case(BaseWorksheetEntity[CaseModel]):
         return WorksheetRow.get_discussions(cls.WORKSHEET_ID, case_model.rowid)
 
     @classmethod
-    def append_enrichment(
+    def attach_enrichment(
             cls,
             case_id: str,
-            name: str = "",
-            type: str = "Other",
-            provider: str = "Other",
-            value: str = "",
-            src_url: str = "",
-            desc: str = "",
-            data: str = ""
+            enrichment_rowid: str
     ) -> Union[str, None]:
         case_old = cls.get_by_id(case_id, lazy_load=True)
         if not case_old:
             return None
-
-        enrichment_new = EnrichmentModel()
-        enrichment_new.name = name
-        enrichment_new.type = type
-        enrichment_new.provider = provider
-        enrichment_new.value = value
-        enrichment_new.src_url = src_url
-        enrichment_new.desc = desc
-        enrichment_new.data = data
-        enrichment_rowid = Enrichment.create(enrichment_new)
 
         existing_enrichments = []
         for enrichment in case_old.enrichments or []:
@@ -456,12 +405,42 @@ class Case(BaseWorksheetEntity[CaseModel]):
             elif enrichment.rowid:
                 existing_enrichments.append(enrichment.rowid)
 
+        if enrichment_rowid in existing_enrichments:
+            return enrichment_rowid
+
         case_new = CaseModel()
         case_new.rowid = case_old.rowid
         case_new.enrichments = [*existing_enrichments, enrichment_rowid]
         cls.update(case_new)
 
         return enrichment_rowid
+
+    @classmethod
+    def attach_ticket(
+            cls,
+            case_id: str,
+            ticket_rowid: str
+    ) -> Union[str, None]:
+        case_old = cls.get_by_id(case_id, lazy_load=True)
+        if not case_old:
+            return None
+
+        existing_tickets = []
+        for ticket in case_old.tickets or []:
+            if isinstance(ticket, str):
+                existing_tickets.append(ticket)
+            elif ticket.rowid:
+                existing_tickets.append(ticket.rowid)
+
+        if ticket_rowid in existing_tickets:
+            return ticket_rowid
+
+        case_new = CaseModel()
+        case_new.rowid = case_old.rowid
+        case_new.tickets = [*existing_tickets, ticket_rowid]
+        cls.update(case_new)
+
+        return ticket_rowid
 
 
 class Message(BaseWorksheetEntity[MessageModel]):
@@ -596,7 +575,7 @@ class Knowledge(BaseWorksheetEntity[KnowledgeModel]):
         return cls.list(filter_model)
 
     @classmethod
-    def update_entry(
+    def update_by_id(
             cls,
             knowledge_id: str,
             title: Union[str, None] = None,

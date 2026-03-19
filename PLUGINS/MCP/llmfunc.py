@@ -6,9 +6,10 @@ from Lib.playbookloader import PlaybookLoader
 from PLUGINS.SIEM.models import AdaptiveQueryInput, KeywordSearchInput, SchemaExplorerInput
 from PLUGINS.SIEM.tools import SIEMToolKit
 from PLUGINS.SIRP.nocolymodel import Group, Condition, Operator
-from PLUGINS.SIRP.sirpapi import Alert, Artifact, Case, Knowledge, Playbook, Ticket
-from PLUGINS.SIRP.sirpmodel import ArtifactReputationScore, ArtifactRole, ArtifactType, AlertStatus, CaseModel, Severity, CaseStatus, CaseVerdict, Confidence, \
-    AttackStage, KnowledgeAction, KnowledgeSource, PlaybookJobStatus, PlaybookType, TicketStatus, TicketType
+from PLUGINS.SIRP.sirpapi import Alert, Artifact, Case, Enrichment, Knowledge, Playbook, Ticket
+from PLUGINS.SIRP.sirpmodel import ArtifactModel, ArtifactReputationScore, ArtifactRole, ArtifactType, AlertStatus, EnrichmentModel, Severity, \
+    CaseStatus, CaseVerdict, Confidence, \
+    AttackStage, KnowledgeAction, KnowledgeSource, PlaybookJobStatus, PlaybookType, TicketStatus, TicketType, TicketModel
 
 
 def _build_filter_group(conditions: list[Condition]) -> Group:
@@ -79,30 +80,17 @@ def update_case(
             str], "Updated AI summary. Markdown supported"] = None
 ) -> Annotated[Optional[str], "Updated case row ID, or None if not found"]:
     """Update selected fields on a case."""
-    case_old = Case.get_by_id(case_id, lazy_load=True)
-    if not case_old:
-        return None
-
-    case_new = CaseModel()
-    case_new.rowid = case_old.rowid
-    if severity:
-        case_new.severity = severity
-    if status:
-        case_new.status = status
-    if verdict:
-        case_new.verdict = verdict
-    if severity_ai:
-        case_new.severity_ai = severity_ai
-    if confidence_ai:
-        case_new.confidence_ai = confidence_ai
-    if attack_stage_ai:
-        case_new.attack_stage_ai = attack_stage_ai
-    if comment_ai:
-        case_new.comment_ai = comment_ai
-    if summary_ai:
-        case_new.summary_ai = summary_ai
-
-    return Case.update(case_new)
+    return Case.update_by_id(
+        case_id=case_id,
+        severity=severity,
+        status=status,
+        verdict=verdict,
+        severity_ai=severity_ai,
+        confidence_ai=confidence_ai,
+        attack_stage_ai=attack_stage_ai,
+        comment_ai=comment_ai,
+        summary_ai=summary_ai
+    )
 
 
 # Alert
@@ -150,7 +138,7 @@ def update_alert(
         comment_ai: Annotated[Optional[str], "Updated AI comment. Markdown supported"] = None
 ) -> Annotated[Optional[str], "Updated alert row ID, or None if not found"]:
     """Update selected AI fields on an alert."""
-    return Alert.update_ai_fields(
+    return Alert.update_by_id(
         alert_id=alert_id,
         severity_ai=severity_ai,
         confidence_ai=confidence_ai,
@@ -160,26 +148,35 @@ def update_alert(
 
 # Artifact
 
-def append_artifact(
-        alert_id: Annotated[str, "Target alert ID to append the artifact to"],
+def create_artifact(
         name: Annotated[str, "Artifact name"] = "",
         type: Annotated[Optional[ArtifactType], "Artifact type"] = None,
-        role: Annotated[Optional[ArtifactRole], "Artifact role in the alert"] = None,
+        role: Annotated[Optional[ArtifactRole], "Artifact role"] = None,
         owner: Annotated[str, "Artifact owner"] = "",
         value: Annotated[str, "Artifact value"] = "",
         reputation_provider: Annotated[str, "Threat intel provider"] = "",
         reputation_score: Annotated[Optional[ArtifactReputationScore], "Artifact reputation score"] = None
-) -> Annotated[Optional[str], "Created artifact row ID, or None if alert not found"]:
-    """Create one artifact and attach it to an existing alert."""
-    return Alert.append_artifact(
+) -> Annotated[str, "Created artifact record row ID"]:
+    """Create one artifact record."""
+    model = ArtifactModel()
+    model.name = name
+    model.type = type
+    model.role = role
+    model.owner = owner
+    model.value = value
+    model.reputation_provider = reputation_provider
+    model.reputation_score = reputation_score
+    return Artifact.create(model)
+
+
+def attach_artifact_to_alert(
+    alert_id: Annotated[str, "Target alert ID to receive the existing artifact"],
+    artifact_rowid: Annotated[str, "Artifact record row ID returned by create_artifact"]
+) -> Annotated[Optional[str], "Attached artifact record row ID, or None if alert not found"]:
+    """Attach one existing artifact record to an existing alert."""
+    return Alert.attach_artifact(
         alert_id=alert_id,
-        name=name,
-        type=type,
-        role=role,
-        owner=owner,
-        value=value,
-        reputation_provider=reputation_provider,
-        reputation_score=reputation_score
+        artifact_rowid=artifact_rowid
     )
 
 
@@ -213,9 +210,7 @@ def list_artifacts(
 
 
 # Enrichment
-def append_enrichment(
-        target_type: Annotated[str, "Target object type: CASE, ALERT, or ARTIFACT"],
-        target_id: Annotated[str, "Target object ID"],
+def create_enrichment(
         name: Annotated[str, "Enrichment name"] = "",
         type: Annotated[str, "Enrichment type"] = "Other",
         provider: Annotated[str, "Enrichment provider"] = "Other",
@@ -223,44 +218,43 @@ def append_enrichment(
         src_url: Annotated[str, "Enrichment source URL"] = "",
         desc: Annotated[str, "Enrichment summary"] = "",
         data: Annotated[str, "Detailed enrichment JSON string"] = ""
-) -> Annotated[Optional[str], "Created enrichment row ID, or None if target not found"]:
-    """Create one enrichment and attach it to an existing case, alert, or artifact."""
+) -> Annotated[str, "Created enrichment record row ID"]:
+    """Create one enrichment record."""
+    model = EnrichmentModel()
+    model.name = name
+    model.type = type
+    model.provider = provider
+    model.value = value
+    model.src_url = src_url
+    model.desc = desc
+    model.data = data
+    return Enrichment.create(model)
+
+
+def attach_enrichment_to_target(
+    target_type: Annotated[str, "Target object type: case, alert, or artifact"],
+    target_id: Annotated[str, "Target object ID to receive the existing enrichment"],
+    enrichment_rowid: Annotated[str, "Enrichment record row ID returned by create_enrichment"]
+) -> Annotated[Optional[str], "Attached enrichment record row ID, or None if target not found"]:
+    """Attach one existing enrichment record to an existing case, alert, or artifact."""
     normalized_target_type = target_type.strip().lower()
 
     if normalized_target_type == "case":
-        return Case.append_enrichment(
+        return Case.attach_enrichment(
             case_id=target_id,
-            name=name,
-            type=type,
-            provider=provider,
-            value=value,
-            src_url=src_url,
-            desc=desc,
-            data=data
+            enrichment_rowid=enrichment_rowid
         )
 
     if normalized_target_type == "alert":
-        return Alert.append_enrichment(
+        return Alert.attach_enrichment(
             alert_id=target_id,
-            name=name,
-            type=type,
-            provider=provider,
-            value=value,
-            src_url=src_url,
-            desc=desc,
-            data=data
+            enrichment_rowid=enrichment_rowid
         )
 
     if normalized_target_type == "artifact":
-        return Artifact.append_enrichment(
+        return Artifact.attach_enrichment(
             artifact_id=target_id,
-            name=name,
-            type=type,
-            provider=provider,
-            value=value,
-            src_url=src_url,
-            desc=desc,
-            data=data
+            enrichment_rowid=enrichment_rowid
         )
 
     raise ValueError("target_type must be one of: case, alert, artifact")
@@ -272,17 +266,26 @@ def create_ticket(
         title: Annotated[str, "Ticket title"] = "",
         status: Annotated[Optional[TicketStatus], "External ticket status"] = None,
         type: Annotated[Optional[TicketType], "External ticket type"] = None,
-        src_url: Annotated[str, "External ticket URL"] = "",
-        case_id: Annotated[Optional[str], "Optional case ID to link this ticket to"] = None
-) -> Annotated[str, "Created ticket row ID"]:
+        src_url: Annotated[str, "External ticket URL"] = ""
+) -> Annotated[str, "Created ticket record row ID"]:
     """Create one synced external ticket record in SIRP."""
-    return Ticket.create_from_sync(
-        uid=uid,
-        title=title,
-        status=status,
-        type=type,
-        src_url=src_url,
-        case_id=case_id
+    model = TicketModel()
+    model.uid = uid
+    model.title = title
+    model.status = status
+    model.type = type
+    model.src_url = src_url
+    return Ticket.create(model)
+
+
+def attach_ticket_to_case(
+    case_id: Annotated[str, "Target case ID to receive the existing ticket"],
+    ticket_rowid: Annotated[str, "Ticket record row ID returned by create_ticket"]
+) -> Annotated[Optional[str], "Attached ticket record row ID, or None if case not found"]:
+    """Attach one existing ticket record to an existing case."""
+    return Case.attach_ticket(
+        case_id=case_id,
+        ticket_rowid=ticket_rowid
     )
 
 
@@ -316,7 +319,7 @@ def update_ticket(
         src_url: Annotated[Optional[str], "Updated external ticket URL"] = None
 ) -> Annotated[Optional[str], "Updated ticket row ID, or None if not found"]:
     """Update one synced external ticket record in SIRP."""
-    return Ticket.update_from_sync(
+    return Ticket.update_by_id(
         ticket_id=ticket_id,
         uid=uid,
         title=title,
@@ -414,7 +417,7 @@ def update_knowledge(
         tags: Annotated[Optional[list[str]], "Updated knowledge tags; pass [] to clear"] = None
 ) -> Annotated[Optional[str], "Updated knowledge row ID, or None if not found"]:
     """Update one knowledge record in SIRP."""
-    return Knowledge.update_entry(
+    return Knowledge.update_by_id(
         knowledge_id=knowledge_id,
         title=title,
         body=body,
