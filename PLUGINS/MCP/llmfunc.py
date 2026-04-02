@@ -17,7 +17,7 @@ def _build_filter_group(conditions: list[Condition]) -> Group:
 
 
 def _dump_models_for_ai(models, limit: int) -> list[str]:
-    return [model.model_dump_json_for_ai() for model in models[:limit]]
+    return [model.model_dump_for_ai() for model in models[:limit]]
 
 
 # Case
@@ -52,7 +52,7 @@ def list_cases(
         conditions.append(Condition(field="tags", operator=Operator.CONTAINS, value=tags))
 
     filter_model = _build_filter_group(conditions)
-    models = Case.list(filter_model, lazy_load=True)
+    models = Case.list(filter_model, lazy_load=False)
     return _dump_models_for_ai(models, limit)
 
 
@@ -113,7 +113,7 @@ def list_alerts(
         conditions.append(Condition(field="correlation_uid", operator=Operator.EQ, value=correlation_uid))
 
     filter_model = _build_filter_group(conditions)
-    models = Alert.list(filter_model, lazy_load=True)
+    models = Alert.list(filter_model, lazy_load=False)
     return _dump_models_for_ai(models, limit)
 
 

@@ -84,6 +84,8 @@ class WorksheetRow(object):
                     for key in fields:
                         if fields[key]['id'] == alias:
                             logger.warning(f"error field  is '{fields[key]['name']}'")
+                            logger.warning(f"row data : {row}")
+
                     continue
                 data_new[alias] = WorksheetRow._format_input_value(field, row[alias])
         return data_new

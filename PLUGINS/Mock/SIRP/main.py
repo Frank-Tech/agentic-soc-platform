@@ -20,7 +20,7 @@ if __name__ == "__main__":
         # case9_priv_esc,
         # case10_cloud_misconfig,
         case11_brute_force,
-        # case12_sql_injection,
+        case12_sql_injection,
         # case13_ransomware
     ]:
         Case.create(case)

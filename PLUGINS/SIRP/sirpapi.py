@@ -159,6 +159,9 @@ class Alert(BaseWorksheetEntity[AlertModel]):
             include_system_fields=include_system_fields,
             lazy_load=False
         )
+        model.case = Case.list_by_rowids(model.case,
+                                         include_system_fields=include_system_fields,
+                                         lazy_load=True)  # lazy_load 为 True 是为了避免循环加载 Case 和 Alert 之间的关联数据
         return model
 
     @classmethod

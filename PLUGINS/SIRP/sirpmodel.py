@@ -571,6 +571,9 @@ class TicketModel(BaseSystemModel):
     uid: Optional[str] = Field(default="", description="External ticket ID")
     src_url: Optional[str] = Field(default="", description="External ticket URL")
 
+    # 反向关联
+    case: Optional[List[Union[CaseModel, str]]] = Field(default=None, description="Linked case row IDs")
+
 
 class ArtifactModel(BaseSystemModel):
     ai_exclude_fields: ClassVar[set[str]] = {'ownerid', 'caid', 'uaid'}
