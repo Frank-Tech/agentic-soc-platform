@@ -22,7 +22,7 @@ def _dump_models_for_ai(models, limit: int) -> list[str]:
 
 # Case
 def list_cases(
-    rowid: Annotated[Optional[str], "Case row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
+        rowid: Annotated[Optional[str], "Case row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
         case_id: Annotated[Optional[str], "Case ID, e.g. case_000005"] = None,
         status: Annotated[Optional[list[CaseStatus]], "Case status filter"] = None,
         severity: Annotated[Optional[list[Severity]], "Case severity filter"] = None,
@@ -31,6 +31,7 @@ def list_cases(
         correlation_uid: Annotated[Optional[str], "Case correlation UID filter"] = None,
         title: Annotated[Optional[str], "Fuzzy case title filter"] = None,
         tags: Annotated[Optional[list[str]], "Case tag filter"] = None,
+        lazy_load: Annotated[bool, "True means do not load attached related data"] = False,
         limit: Annotated[int, "Max cases to return"] = 10
 ) -> Annotated[list[str], "Matching cases as AI-friendly JSON list"]:
     """List cases with optional filters."""
@@ -55,7 +56,7 @@ def list_cases(
         conditions.append(Condition(field="tags", operator=Operator.CONTAINS, value=tags))
 
     filter_model = _build_filter_group(conditions)
-    models = Case.list(filter_model, lazy_load=False)
+    models = Case.list(filter_model, lazy_load=lazy_load)
     return _dump_models_for_ai(models, limit)
 
 
@@ -94,12 +95,13 @@ def update_case(
 
 # Alert
 def list_alerts(
-    rowid: Annotated[Optional[str], "Alert row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
+        rowid: Annotated[Optional[str], "Alert row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
         alert_id: Annotated[Optional[str], "Alert ID, e.g. alert_000001"] = None,
         status: Annotated[Optional[list[AlertStatus]], "Alert status filter"] = None,
         severity: Annotated[Optional[list[Severity]], "Alert severity filter"] = None,
         confidence: Annotated[Optional[list[Confidence]], "Alert confidence filter"] = None,
         correlation_uid: Annotated[Optional[str], "Alert correlation UID filter"] = None,
+        lazy_load: Annotated[bool, "True means do not load attached related data"] = False,
         limit: Annotated[int, "Max alerts to return"] = 10
 ) -> Annotated[list[str], "Matching alerts as AI-friendly JSON list"]:
     """List alerts with optional filters."""
@@ -119,7 +121,7 @@ def list_alerts(
         conditions.append(Condition(field="correlation_uid", operator=Operator.EQ, value=correlation_uid))
 
     filter_model = _build_filter_group(conditions)
-    models = Alert.list(filter_model, lazy_load=False)
+    models = Alert.list(filter_model, lazy_load=lazy_load)
     return _dump_models_for_ai(models, limit)
 
 
@@ -184,13 +186,14 @@ def attach_artifact_to_alert(
 
 
 def list_artifacts(
-    rowid: Annotated[Optional[str], "Artifact row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
+        rowid: Annotated[Optional[str], "Artifact row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
         artifact_id: Annotated[Optional[str], "Artifact ID, e.g. artifact_000001"] = None,
         type: Annotated[Optional[list[ArtifactType]], "Artifact type filter"] = None,
         role: Annotated[Optional[list[ArtifactRole]], "Artifact role filter"] = None,
         reputation_score: Annotated[Optional[list[ArtifactReputationScore]], "Artifact reputation filter"] = None,
         owner: Annotated[Optional[str], "Artifact owner filter"] = None,
         value: Annotated[Optional[str], "Exact artifact value filter"] = None,
+        lazy_load: Annotated[bool, "True means do not load attached related data"] = True,
         limit: Annotated[int, "Max artifacts to return"] = 10
 ) -> Annotated[list[str], "Matching artifacts as AI-friendly JSON list"]:
     """List artifacts with optional filters."""
@@ -211,7 +214,7 @@ def list_artifacts(
         conditions.append(Condition(field="value", operator=Operator.EQ, value=value))
 
     filter_model = _build_filter_group(conditions)
-    models = Artifact.list(filter_model, lazy_load=True)
+    models = Artifact.list(filter_model, lazy_load=lazy_load)
     return _dump_models_for_ai(models, limit)
 
 
@@ -346,7 +349,7 @@ def list_available_playbook_definitions(
 
 
 def list_playbook_runs(
-    rowid: Annotated[Optional[str], "Playbook run row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
+        rowid: Annotated[Optional[str], "Playbook run row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
         playbook_id: Annotated[Optional[str], "Playbook run ID, e.g. playbook_000001"] = None,
         job_status: Annotated[Optional[list[PlaybookJobStatus]], "Playbook job status filter"] = None,
         type: Annotated[Optional[list[PlaybookType]], "Playbook type filter"] = None,
@@ -389,7 +392,7 @@ def execute_playbook(
 
 
 def list_knowledge(
-    rowid: Annotated[Optional[str], "Knowledge row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
+        rowid: Annotated[Optional[str], "Knowledge row ID filter, e.g. 03c26478-b213-44c8-b651-3cc88abaac01"] = None,
         action: Annotated[Optional[list[KnowledgeAction]], "Knowledge action filter"] = None,
         source: Annotated[Optional[list[KnowledgeSource]], "Knowledge source filter"] = None,
         using: Annotated[Optional[bool], "Knowledge using flag filter"] = None,
