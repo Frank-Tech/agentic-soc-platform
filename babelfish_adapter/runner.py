@@ -30,12 +30,14 @@ def _build_langfuse_callbacks(trace_id: str) -> list:
     sec = os.environ.get("CLIENT_LANGFUSE_SECRET_KEY")
     host = os.environ.get("CLIENT_LANGFUSE_HOST")
     if not (pub and sec and host):
+        print(f"[adapter] WARNING: Langfuse env vars missing pub={bool(pub)} sec={bool(sec)} host={bool(host)}")
         return []
     from langfuse import Langfuse
     from langfuse.langchain import CallbackHandler
 
     Langfuse(public_key=pub, secret_key=sec, base_url=host)
     handler = CallbackHandler(public_key=pub, trace_context={"trace_id": trace_id})
+    print(f"[adapter] Langfuse handler created for trace_id={trace_id}")
     return [handler]
 
 
@@ -91,15 +93,21 @@ async def run(
 
         initial_state = playbook.agent_state if playbook.agent_state is not None else BaseAgentState()
 
+        step_count = 0
         async for step in playbook.graph.astream(initial_state, config):
+            step_count += 1
             yield step
+        print(f"[adapter] Graph completed: {step_count} steps yielded")
     finally:
         for cb in callbacks:
+            trace_id_used = getattr(cb, "last_trace_id", "unknown")
+            print(f"[adapter] Handler last_trace_id={trace_id_used}")
             if hasattr(cb, "_langfuse_client"):
                 try:
                     cb._langfuse_client.flush()
-                except Exception:
-                    pass
+                    print(f"[adapter] Langfuse flushed OK")
+                except Exception as e:
+                    print(f"[adapter] Langfuse flush error: {e}")
         try:
             babelfish_context.reset(token)
         except ValueError:
