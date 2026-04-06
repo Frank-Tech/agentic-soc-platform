@@ -1,0 +1,2 @@
+HTTP_PROXY = None
+API_KEY = ""
