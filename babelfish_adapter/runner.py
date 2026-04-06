@@ -94,6 +94,12 @@ async def run(
         async for step in playbook.graph.astream(initial_state, config):
             yield step
     finally:
+        for cb in callbacks:
+            if hasattr(cb, "_langfuse_client"):
+                try:
+                    cb._langfuse_client.flush()
+                except Exception:
+                    pass
         try:
             babelfish_context.reset(token)
         except ValueError:
