@@ -1,3 +1,4 @@
+import os
 from abc import ABC
 from typing import TypeVar, Generic, Type, List, Dict, Union, Any
 
@@ -322,3 +323,65 @@ class BaseSimpleEntity(ABC):
             更新的记录ID
         """
         return WorksheetRow.update(cls.WORKSHEET_ID, rowid, fields)
+
+
+if os.getenv("ASP_SKIP_SIRP"):
+    from asp_adapter.registry import lookup as _adapter_lookup
+
+    @classmethod
+    def _noop_get(cls, rowid, include_system_fields=True, lazy_load=False):
+        entity = _adapter_lookup(rowid)
+        if entity is None:
+            return cls.MODEL_CLASS(rowid=rowid)
+        return entity
+
+    @classmethod
+    def _noop_list(cls, filter_model, include_system_fields=True, lazy_load=False):
+        return []
+
+    @classmethod
+    def _noop_list_by_rowids(cls, rowids, include_system_fields=True, lazy_load=False):
+        return rowids if rowids else []
+
+    @classmethod
+    def _noop_create(cls, model):
+        if getattr(model, "rowid", None) is None:
+            import uuid as _uuid
+            model.rowid = str(_uuid.uuid4())
+        return model.rowid
+
+    @classmethod
+    def _noop_update(cls, model):
+        return getattr(model, "rowid", None)
+
+    @classmethod
+    def _noop_update_or_create(cls, model):
+        if getattr(model, "rowid", None) is None:
+            import uuid as _uuid
+            model.rowid = str(_uuid.uuid4())
+        return model.rowid
+
+    @classmethod
+    def _noop_update_by_filter(cls, filter_model, model, include_system_fields=True):
+        return {}
+
+    @classmethod
+    def _noop_batch_update_or_create(cls, model_list):
+        if model_list is None:
+            return None
+        out = []
+        for m in model_list:
+            if isinstance(m, str):
+                out.append(m)
+            else:
+                out.append(cls.update_or_create(m))
+        return out
+
+    BaseWorksheetEntity.get = _noop_get
+    BaseWorksheetEntity.list = _noop_list
+    BaseWorksheetEntity.list_by_rowids = _noop_list_by_rowids
+    BaseWorksheetEntity.create = _noop_create
+    BaseWorksheetEntity.update = _noop_update
+    BaseWorksheetEntity.update_or_create = _noop_update_or_create
+    BaseWorksheetEntity.update_by_filter = _noop_update_by_filter
+    BaseWorksheetEntity.batch_update_or_create = _noop_batch_update_or_create

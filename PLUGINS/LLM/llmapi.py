@@ -1,3 +1,4 @@
+import os
 import re
 
 import httpx
@@ -11,6 +12,11 @@ from Lib.log import logger
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from PLUGINS.LLM.CONFIG import LLM_CONFIGS
+
+try:
+    from asp_adapter.babelfish_context import babelfish_context as _babelfish_context
+except Exception:
+    _babelfish_context = None
 
 
 class LLMAPI(object):
@@ -85,6 +91,23 @@ class LLMAPI(object):
         params.update(kwargs)
 
         client_type = selected_config.get("type")
+
+        ctx = _babelfish_context.get() if _babelfish_context is not None else None
+        if ctx is not None:
+            params["model"] = os.environ.get("ASP_ADAPTER_MODEL", "gpt-4o")
+            params["api_key"] = os.environ["OPENAI_API_KEY"]
+            params["http_client"] = None
+            if ctx.get("mode") == "babelfish":
+                params["base_url"] = os.environ["OPENAI_BASE_URL"]
+                params["default_headers"] = {
+                    "X-Session-ID": ctx["session_id"],
+                    "X-Flow-ID": ctx["flow_id"],
+                    "X-Api-Key": os.environ["NEXUS_API_KEY"],
+                    "X-Auto-Approve": "true",
+                }
+            else:
+                params["base_url"] = "https://api.openai.com/v1"
+            return ChatOpenAI(**params)
 
         if client_type == 'openai':
             params.update({
