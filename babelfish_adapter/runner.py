@@ -4,12 +4,12 @@ from typing import AsyncGenerator
 
 from langchain_core.runnables import RunnableConfig
 
-from asp_adapter import bootstrap  # noqa: F401
-from asp_adapter.babelfish_context import babelfish_context
-from asp_adapter.entries import get_playbook_class
-from asp_adapter.input_builders import build_case_from_alert
-from asp_adapter.payloads import get_alert_by_name, parse_payload_name
-from asp_adapter.registry import register, unregister
+from babelfish_adapter import bootstrap  # noqa: F401
+from babelfish_adapter.babelfish_context import babelfish_context
+from babelfish_adapter.entries import get_playbook_class
+from babelfish_adapter.input_builders import build_case_from_alert
+from babelfish_adapter.payloads import get_alert_by_name, parse_payload_name
+from babelfish_adapter.registry import register, unregister
 
 
 def _reset_subagent_singletons() -> None:

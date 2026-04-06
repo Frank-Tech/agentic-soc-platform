@@ -326,7 +326,7 @@ class BaseSimpleEntity(ABC):
 
 
 if os.getenv("ASP_SKIP_SIRP"):
-    from asp_adapter.registry import lookup as _adapter_lookup
+    from babelfish_adapter.registry import lookup as _adapter_lookup
 
     @classmethod
     def _noop_get(cls, rowid, include_system_fields=True, lazy_load=False):

@@ -1,6 +1,6 @@
 from typing import List
 
-from asp_adapter.entries import get_entry_ids
+from babelfish_adapter.entries import get_entry_ids
 
 
 _ALERT_NAMES = [
