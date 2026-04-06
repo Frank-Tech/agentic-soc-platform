@@ -68,12 +68,15 @@ async def run(
 
     _reset_subagent_singletons()
 
+    callbacks = _build_langfuse_callbacks(trace_id)
+
     token = babelfish_context.set(
         {
             "mode": mode,
             "session_id": session_id,
             "trace_id": trace_id,
             "flow_id": flow_id,
+            "callbacks": callbacks,
         }
     )
 
@@ -82,7 +85,6 @@ async def run(
         playbook = PlaybookClass()
         playbook._playbook_model = playbook_model
 
-        callbacks = _build_langfuse_callbacks(trace_id)
         config = RunnableConfig(configurable={"thread_id": session_id}, callbacks=callbacks)
 
         from Lib.llmapi import BaseAgentState
