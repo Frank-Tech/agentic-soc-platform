@@ -97,8 +97,6 @@ class LLMAPI(object):
             params["model"] = os.environ.get("ASP_ADAPTER_MODEL", "gpt-4o")
             params["api_key"] = os.environ["OPENAI_API_KEY"]
             params["http_client"] = None
-            if ctx.get("callbacks"):
-                params["callbacks"] = ctx["callbacks"]
             if ctx.get("mode") == "babelfish":
                 params["base_url"] = os.environ["OPENAI_BASE_URL"]
                 params["default_headers"] = {
