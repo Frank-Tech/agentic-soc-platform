@@ -407,7 +407,12 @@ class Playbook(LanggraphPlaybook):
             ]
             llm = llm.with_structured_output(HuntingPlan)
 
-            response: HuntingPlan = llm.invoke(messages)
+            # gpt-4o sometimes returns plain text instead of JSON when system prompts are in Chinese.
+            # Empty plan triggers the normal "no more tasks" exit path → reporter_node → END.
+            try:
+                response: HuntingPlan = llm.invoke(messages)
+            except Exception:
+                response = HuntingPlan(current_plan=[], rationale="Structured output parse failed")
 
             current_record = PlanningRecord(
                 iteration=iteration_count,
