@@ -1,5 +1,5 @@
 name: siem-host-events
-backend: Splunk
+backend: ELK
 description: Host endpoint events including process and file activities.
 
 fields:
