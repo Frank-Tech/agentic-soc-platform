@@ -170,10 +170,12 @@ class Playbook(LanggraphPlaybook):
         workflow.add_edge(START, NODE_PREPROCESS)
         workflow.add_edge(NODE_PREPROCESS, NODE_ANALYZE)
 
+        # NODE_ANALYZE must be in the path_map: should_continue returns it
+        # for self-loop when LLM responds without tool calls.
         workflow.add_conditional_edges(
             NODE_ANALYZE,
             should_continue,
-            [NODE_TOOLS, NODE_OUTPUT, END]
+            [NODE_ANALYZE, NODE_TOOLS, NODE_OUTPUT, END]
         )
 
         workflow.add_edge(NODE_TOOLS, NODE_ANALYZE)
