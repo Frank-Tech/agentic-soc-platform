@@ -105,12 +105,11 @@ class GraphAgent(LanggraphPlaybook):
             self.logger.debug(f"Agent Node Invoked (Loop: {state.loop_count})")
             self.logger.debug(f"Current messages count: {len(state.messages)}")
 
-            system_message = self._system_prompt_template.format(
-                CURRENT_UTC_TIME=get_current_time_str(),
-                AVAILABLE_INDICES=self._schema_info
-            )
+            system_message = self._system_prompt_template.format()
 
-            messages = [system_message, *state.messages]
+            context_msg = HumanMessage(content=f"[Context] Current UTC Time: {get_current_time_str()}\n{self._schema_info}")
+
+            messages = [system_message, context_msg, *state.messages]
             self.logger.debug(f"Total messages to send to LLM: {len(messages)}")
 
             if state.loop_count >= state.max_iterations - 1:

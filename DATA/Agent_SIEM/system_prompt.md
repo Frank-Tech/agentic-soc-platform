@@ -5,9 +5,7 @@ against SIEM data sources and return the results efficiently.
 
 ## Current Context
 
-- **Current UTC Time**: `{CURRENT_UTC_TIME}`
-
-{AVAILABLE_INDICES}
+The current UTC time and available SIEM indices will be provided in each query message.
 
 ## Available Tools
 
