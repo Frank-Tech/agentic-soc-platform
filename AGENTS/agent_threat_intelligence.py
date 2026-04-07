@@ -116,13 +116,22 @@ class GraphAgent(LanggraphPlaybook):
             self.graph.checkpointer.delete_thread(self.module_name)
             logger.debug(f"Deleted previous thread state for module: {self.module_name}")
 
-        config = RunnableConfig(configurable={"thread_id": self.module_name})
+        try:
+            from babelfish_adapter.babelfish_context import get_subflow_callbacks, flush_callbacks
+            _sf_cbs = get_subflow_callbacks(self._system_prompt_template.format().content)
+        except Exception:
+            _sf_cbs = []
+
+        config = RunnableConfig(configurable={"thread_id": self.module_name}, callbacks=_sf_cbs)
 
         initial_state = AgentState(messages=[HumanMessage(content=query)], loop_count=0, max_iterations=max_iterations)
 
         logger.info(f"Starting graph invocation...")
         final_state = self.graph.invoke(initial_state, config)
         logger.info(f"Graph invocation completed")
+
+        if _sf_cbs:
+            flush_callbacks(_sf_cbs)
 
         result = final_state['messages'][-1].content
         logger.info(f"Query result extracted, result length: {len(result)} characters")
