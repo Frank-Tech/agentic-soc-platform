@@ -8,6 +8,7 @@ class BabelfishContextData(TypedDict):
     trace_id: str
     flow_id: str
     callbacks: list
+    trace_mapping: dict
 
 
 babelfish_context: contextvars.ContextVar[Optional[BabelfishContextData]] = contextvars.ContextVar(
