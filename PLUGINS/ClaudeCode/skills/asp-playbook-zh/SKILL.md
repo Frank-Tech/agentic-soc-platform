@@ -49,11 +49,6 @@ metadata:
 3. 只展示与用户目标对象或目标最相关的 definitions。
 4. 明确说明这些是 definitions，而不是 run records。
 
-首选回复结构：
-
-| Definition Name | Likely Target | Purpose |
-|-----------------|---------------|---------|
-
 ### 运行一个 Playbook
 
 1. 要求提供 `target_type`、`target_id` 和 playbook definition `name`。
