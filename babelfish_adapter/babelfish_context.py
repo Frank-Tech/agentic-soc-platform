@@ -10,6 +10,7 @@ class BabelfishContextData(TypedDict):
     flow_id: str
     callbacks: list
     trace_mapping: dict
+    subflow_handlers: dict
 
 
 babelfish_context: contextvars.ContextVar[Optional[BabelfishContextData]] = contextvars.ContextVar(
@@ -33,7 +34,10 @@ def get_subflow_callbacks(system_message_content: str) -> list:
         from langfuse import Langfuse
         from langfuse.langchain import CallbackHandler
         Langfuse(public_key=pub, secret_key=sec, base_url=host)
-        return [CallbackHandler(public_key=pub, trace_context={"trace_id": trace_id})]
+        handler = CallbackHandler(public_key=pub, trace_context={"trace_id": trace_id})
+        subflow_handlers = ctx.get("subflow_handlers", {})
+        subflow_handlers[system_message_content] = handler
+        return [handler]
     except Exception:
         return []
 

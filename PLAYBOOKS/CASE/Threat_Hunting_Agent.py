@@ -186,16 +186,12 @@ class Playbook(LanggraphPlaybook):
         def analyst_node(state: AnalystState):
             self.logger.debug(f"Analyst Node Invoked (Loop: {state.loop_count})")
 
-            messages = state.messages
-
-            if not messages:
-                system_prompt_template = self.load_system_prompt_template("Analyst_System", lang=PROMPT_LANG)
-                system_message = system_prompt_template.format()
-                human_message = self.load_human_prompt_template("Analyst_Human", lang=PROMPT_LANG).format(
-                    question=state.question,
-                    case=state.case
-                )
-                messages = [system_message, human_message]
+            system_message = self.load_system_prompt_template("Analyst_System", lang=PROMPT_LANG).format()
+            human_message = self.load_human_prompt_template("Analyst_Human", lang=PROMPT_LANG).format(
+                question=state.question,
+                case=state.case
+            )
+            messages = [system_message, human_message, *state.messages]
 
             llm_api = LLMAPI()
 

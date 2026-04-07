@@ -153,6 +153,7 @@ class AttackStage(StrEnum):
     COMMAND_AND_CONTROL = "Command and Control"
     EXFILTRATION = "Exfiltration"
     IMPACT = "Impact"
+    EXPLOITATION = "Exploitation"
 
 
 class ImpactLevel(StrEnum):

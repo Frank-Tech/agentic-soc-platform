@@ -12,31 +12,18 @@ from babelfish_adapter.payloads import get_alert_by_name, parse_payload_name
 from babelfish_adapter.registry import register, unregister
 
 
-def _reset_subagent_singletons() -> None:
-    try:
-        from AGENTS import agent_siem
-        agent_siem._graph_agent_instance = None
-    except Exception:
-        pass
-    try:
-        from AGENTS import agent_threat_intelligence
-        agent_threat_intelligence._graph_agent_instance = None
-    except Exception:
-        pass
-
-
-def _build_langfuse_callbacks(trace_id: str) -> list:
+def _build_langfuse_callbacks(trace_id: str) -> tuple[list, object | None]:
     pub = os.environ.get("CLIENT_LANGFUSE_PUBLIC_KEY")
     sec = os.environ.get("CLIENT_LANGFUSE_SECRET_KEY")
     host = os.environ.get("CLIENT_LANGFUSE_HOST")
     if not (pub and sec and host):
-        return []
+        return [], None
     from langfuse import Langfuse
     from langfuse.langchain import CallbackHandler
 
     Langfuse(public_key=pub, secret_key=sec, base_url=host)
     handler = CallbackHandler(public_key=pub, trace_context={"trace_id": trace_id})
-    return [handler]
+    return [handler], handler
 
 
 async def run(
@@ -67,10 +54,9 @@ async def run(
     register(case.rowid, case)
     register(playbook_rowid, playbook_model)
 
-    _reset_subagent_singletons()
+    callbacks, main_handler = _build_langfuse_callbacks(trace_id)
 
-    callbacks = _build_langfuse_callbacks(trace_id)
-
+    subflow_handlers: dict = {}
     token = babelfish_context.set(
         {
             "mode": mode,
@@ -79,6 +65,7 @@ async def run(
             "flow_id": flow_id,
             "callbacks": callbacks,
             "trace_mapping": trace_mapping or {},
+            "subflow_handlers": subflow_handlers,
         }
     )
 
@@ -95,6 +82,21 @@ async def run(
 
         async for step in playbook.graph.astream(initial_state, config):
             yield step
+
+        actual_trace_id = (
+            main_handler.last_trace_id if main_handler and main_handler.last_trace_id
+            else trace_id
+        )
+        subflow_trace_ids = {}
+        for content_key, h in subflow_handlers.items():
+            if hasattr(h, "last_trace_id") and h.last_trace_id:
+                subflow_trace_ids[content_key] = h.last_trace_id
+        yield {
+            "__trace_metadata__": {
+                "client_trace_id": actual_trace_id,
+                "subflow_trace_ids": subflow_trace_ids,
+            }
+        }
     finally:
         for cb in callbacks:
             if hasattr(cb, "_langfuse_client"):

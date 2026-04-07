@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated, Literal, Any, List
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -110,11 +111,8 @@ class GraphAgent(LanggraphPlaybook):
         logger.debug(f"LangGraph workflow compiled successfully")
         return compiled_graph
 
-    def threat_intelligence_query(self, query: str, clear_thread: bool = True, max_iterations: int = MAX_ITERATIONS) -> str:
+    def threat_intelligence_query(self, query: str, max_iterations: int = MAX_ITERATIONS) -> str:
         logger.info(f"Threat Intelligence Query started: {query[:100]}...")
-        if clear_thread:
-            self.graph.checkpointer.delete_thread(self.module_name)
-            logger.debug(f"Deleted previous thread state for module: {self.module_name}")
 
         try:
             from babelfish_adapter.babelfish_context import get_subflow_callbacks, flush_callbacks
@@ -122,7 +120,8 @@ class GraphAgent(LanggraphPlaybook):
         except Exception:
             _sf_cbs = []
 
-        config = RunnableConfig(configurable={"thread_id": self.module_name}, callbacks=_sf_cbs)
+        thread_id = str(uuid.uuid4())
+        config = RunnableConfig(configurable={"thread_id": thread_id}, callbacks=_sf_cbs)
 
         initial_state = AgentState(messages=[HumanMessage(content=query)], loop_count=0, max_iterations=max_iterations)
 

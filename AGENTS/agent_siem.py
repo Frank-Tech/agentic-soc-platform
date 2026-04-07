@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated, List, Literal, Any
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -150,12 +151,9 @@ class GraphAgent(LanggraphPlaybook):
         self.logger.debug(f"LangGraph workflow compiled successfully")
         return compiled_graph
 
-    def siem_query(self, query: str, clear_thread: bool = True, max_iterations: int = MAX_ITERATIONS) -> str:
+    def siem_query(self, query: str, max_iterations: int = MAX_ITERATIONS) -> str:
         """Executes a query against the graph."""
         self.logger.debug(f"SIEM Query: {query}")
-        if clear_thread:
-            self.graph.checkpointer.delete_thread(self.module_name)
-            self.logger.debug(f"Deleted previous thread state for module: {self.module_name}")
 
         try:
             from babelfish_adapter.babelfish_context import get_subflow_callbacks, flush_callbacks
@@ -163,7 +161,8 @@ class GraphAgent(LanggraphPlaybook):
         except Exception:
             _sf_cbs = []
 
-        config = RunnableConfig(configurable={"thread_id": self.module_name}, callbacks=_sf_cbs)
+        thread_id = str(uuid.uuid4())
+        config = RunnableConfig(configurable={"thread_id": thread_id}, callbacks=_sf_cbs)
         self.logger.debug(f"RunnableConfig created with thread_id: {self.module_name}")
 
         initial_state = AgentState(messages=[HumanMessage(content=query)], loop_count=0, max_iterations=max_iterations)
