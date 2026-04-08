@@ -156,11 +156,23 @@ class GraphAgent(LanggraphPlaybook):
         """Executes a query against the graph."""
         self.logger.debug(f"SIEM Query: {query}")
 
+        _sf_cbs = []
+        _sf_token = None
         try:
-            from babelfish_adapter.babelfish_context import get_subflow_callbacks, flush_callbacks
-            _sf_cbs = get_subflow_callbacks(self._system_prompt_template.format().content)
+            from babelfish_adapter.babelfish_context import (
+                babelfish_context, get_subflow_callbacks, flush_callbacks, get_subflow_server_context,
+            )
+            sys_msg_content = self._system_prompt_template.format().content
+            _sf_cbs = get_subflow_callbacks(sys_msg_content)
+
+            # Override babelfish_context so this subflow gets its own X-Session-ID
+            sf_ctx = get_subflow_server_context(sys_msg_content)
+            if sf_ctx:
+                parent_ctx = babelfish_context.get()
+                if parent_ctx:
+                    _sf_token = babelfish_context.set({**parent_ctx, "session_id": sf_ctx["session_id"]})
         except Exception:
-            _sf_cbs = []
+            pass
 
         thread_id = str(uuid.uuid4())
         config = RunnableConfig(configurable={"thread_id": thread_id}, callbacks=_sf_cbs)
@@ -170,7 +182,14 @@ class GraphAgent(LanggraphPlaybook):
         self.logger.debug(f"Initial state created")
 
         self.logger.info(f"Starting graph invocation...")
-        final_state = self.graph.invoke(initial_state, config)
+        try:
+            final_state = self.graph.invoke(initial_state, config)
+        finally:
+            if _sf_token is not None:
+                try:
+                    babelfish_context.reset(_sf_token)
+                except ValueError:
+                    pass
         self.logger.info(f"Graph invocation completed")
 
         if _sf_cbs:

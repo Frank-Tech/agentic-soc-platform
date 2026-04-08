@@ -34,6 +34,7 @@ async def run(
     flow_id: str,
     payload_name: str,
     trace_mapping: dict | None = None,
+    subflow_server_ids: dict | None = None,
 ) -> AsyncGenerator[dict, None]:
     if mode not in ("baseline", "babelfish"):
         raise ValueError(f"Invalid mode: {mode}. Expected 'baseline' or 'babelfish'.")
@@ -66,6 +67,7 @@ async def run(
             "callbacks": callbacks,
             "trace_mapping": trace_mapping or {},
             "subflow_handlers": subflow_handlers,
+            "subflow_server_ids": subflow_server_ids or {},
         }
     )
 

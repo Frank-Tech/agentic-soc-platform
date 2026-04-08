@@ -11,11 +11,29 @@ class BabelfishContextData(TypedDict):
     callbacks: list
     trace_mapping: dict
     subflow_handlers: dict
+    subflow_server_ids: dict
 
 
 babelfish_context: contextvars.ContextVar[Optional[BabelfishContextData]] = contextvars.ContextVar(
     "babelfish_context", default=None
 )
+
+
+def get_subflow_server_context(system_message_content: str) -> dict | None:
+    """Get overridden session_id for a subflow so it gets its own holy-grail trace.
+
+    Returns {"session_id": str} if a mapping exists, None otherwise.
+    """
+    import uuid as _uuid
+    ctx = babelfish_context.get()
+    if not ctx:
+        return None
+    server_ids = ctx.get("subflow_server_ids", {})
+    sf_flow_uuid = server_ids.get(system_message_content)
+    if not sf_flow_uuid:
+        return None
+    sf_session_id = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, f"{ctx['session_id']}-{sf_flow_uuid}"))
+    return {"session_id": sf_session_id}
 
 
 def get_subflow_callbacks(system_message_content: str) -> list:
