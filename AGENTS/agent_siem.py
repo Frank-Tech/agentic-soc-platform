@@ -68,8 +68,6 @@ class GraphAgent(LanggraphPlaybook):
         self._system_prompt_template = self.load_system_prompt_template("system_prompt")
         self._schema_info = self._get_schema_info()
         self._llm_api = LLMAPI()
-        self._llm_base = self._llm_api.get_model(tag=["fast"])
-        self._llm_with_tools = self._llm_api.get_model(tag=["fast", "function_calling"]).bind_tools(tools)
         self.graph = self._build_graph()
 
     @classmethod
@@ -113,6 +111,9 @@ class GraphAgent(LanggraphPlaybook):
             messages = [system_message, context_msg, *state.messages]
             self.logger.debug(f"Total messages to send to LLM: {len(messages)}")
 
+            llm_base = self._llm_api.get_model(tag=["fast"])
+            llm_with_tools = self._llm_api.get_model(tag=["fast", "function_calling"]).bind_tools(tools)
+
             if state.loop_count >= state.max_iterations - 1:
                 self.logger.warning("Approaching max iterations, forcing agent to provide final answer.")
 
@@ -125,11 +126,11 @@ class GraphAgent(LanggraphPlaybook):
                 self.logger.debug("Stop instruction appended to messages")
 
                 self.logger.debug("Using base LLM model (no tool binding) for final response")
-                response: AIMessage = self._llm_base.invoke(messages)
+                response: AIMessage = llm_base.invoke(messages)
                 self.logger.debug(f"Final response generated, tool_calls count: {len(response.tool_calls) if response.tool_calls else 0}")
             else:
                 self.logger.debug(f"Using LLM with tools binding, available tools: {len(tools)}")
-                response: AIMessage = self._llm_with_tools.invoke(messages)
+                response: AIMessage = llm_with_tools.invoke(messages)
                 self.logger.debug(f"Response generated, tool_calls count: {len(response.tool_calls) if response.tool_calls else 0}")
 
             if state.loop_count >= state.max_iterations - 1:
