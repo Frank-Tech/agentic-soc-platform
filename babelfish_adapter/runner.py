@@ -94,6 +94,7 @@ async def run(
         yield {
             "__trace_metadata__": {
                 "client_trace_id": actual_trace_id,
+                "server_trace_id": session_id.replace("-", ""),
                 "subflow_trace_ids": subflow_trace_ids,
             }
         }
