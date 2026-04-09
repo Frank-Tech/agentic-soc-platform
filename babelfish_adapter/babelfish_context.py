@@ -22,6 +22,9 @@ babelfish_context: contextvars.ContextVar[Optional[BabelfishContextData]] = cont
 def get_subflow_server_context(system_message_content: str) -> dict | None:
     """Get overridden session_id for a subflow so it gets its own holy-grail trace.
 
+    The subflow_server_ids mapping uses msg_hash as value (unique per subflow),
+    ensuring multi-subflow flows don't collide on the same X-Session-ID.
+
     Returns {"session_id": str} if a mapping exists, None otherwise.
     """
     import uuid as _uuid
@@ -29,10 +32,10 @@ def get_subflow_server_context(system_message_content: str) -> dict | None:
     if not ctx:
         return None
     server_ids = ctx.get("subflow_server_ids", {})
-    sf_flow_uuid = server_ids.get(system_message_content)
-    if not sf_flow_uuid:
+    sf_key = server_ids.get(system_message_content)
+    if not sf_key:
         return None
-    sf_session_id = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, f"{ctx['session_id']}-{sf_flow_uuid}"))
+    sf_session_id = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, f"{ctx['session_id']}-{sf_key}"))
     return {"session_id": sf_session_id}
 
 
