@@ -1,2 +1,0 @@
-QDRANT_URL = "http://localhost:6333"
-QDRANT_API_KEY = ""

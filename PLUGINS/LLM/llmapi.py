@@ -14,7 +14,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from PLUGINS.LLM.CONFIG import LLM_CONFIGS
 
 try:
-    from babelfish_adapter.babelfish_context import babelfish_context as _babelfish_context
+    from babelfish_adapter.core.context import babelfish_context as _babelfish_context
 except Exception:
     _babelfish_context = None
 

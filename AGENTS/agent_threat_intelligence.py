@@ -1,4 +1,5 @@
 import uuid
+from contextlib import nullcontext
 from typing import Annotated, Literal, Any, List
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -12,6 +13,11 @@ from Lib.baseplaybook import LanggraphPlaybook
 from Lib.log import logger
 from PLUGINS.AlienVaultOTX.alienvaultotx import AlienVaultOTX
 from PLUGINS.LLM.llmapi import LLMAPI
+
+try:
+    from babelfish_adapter.core.context import subflow_context as _subflow_context
+except ImportError:
+    _subflow_context = None
 
 AGENT_NODE = "AGENT"
 TOOL_NODE = "TOOL_NODE"
@@ -58,8 +64,6 @@ class GraphAgent(LanggraphPlaybook):
         super().__init__()
         self._system_prompt_template = self.load_system_prompt_template("system_prompt")
         self._llm_api = LLMAPI()
-        self._llm_base = self._llm_api.get_model(tag=["fast"])
-        self._llm_with_tools = self._llm_api.get_model(tag=["fast", "function_calling"]).bind_tools(tools)
         self.graph = self._build_graph()
 
     def _build_graph(self) -> CompiledStateGraph:
@@ -82,6 +86,9 @@ class GraphAgent(LanggraphPlaybook):
 
             messages = [system_message.format(), *state.messages]
 
+            llm_base = self._llm_api.get_model(tag=["fast"])
+            llm_with_tools = self._llm_api.get_model(tag=["fast", "function_calling"]).bind_tools(tools)
+
             if state.loop_count >= state.max_iterations - 1:
                 stop_instruction = (
                     "\n\n[SYSTEM NOTICE]: You have reached the search limit. "
@@ -89,9 +96,9 @@ class GraphAgent(LanggraphPlaybook):
                     "based ONLY on the information gathered above."
                 )
                 messages.append(HumanMessage(content=stop_instruction))
-                response: AIMessage = self._llm_base.invoke(messages)
+                response: AIMessage = llm_base.invoke(messages)
             else:
-                response: AIMessage = self._llm_with_tools.invoke(messages)
+                response: AIMessage = llm_with_tools.invoke(messages)
 
             if state.loop_count >= state.max_iterations - 1:
                 if response.tool_calls:
@@ -114,23 +121,15 @@ class GraphAgent(LanggraphPlaybook):
     def threat_intelligence_query(self, query: str, max_iterations: int = MAX_ITERATIONS) -> str:
         logger.info(f"Threat Intelligence Query started: {query[:100]}...")
 
-        try:
-            from babelfish_adapter.babelfish_context import get_subflow_callbacks, flush_callbacks
-            _sf_cbs = get_subflow_callbacks(self._system_prompt_template.format().content)
-        except Exception:
-            _sf_cbs = []
-
         thread_id = str(uuid.uuid4())
-        config = RunnableConfig(configurable={"thread_id": thread_id}, callbacks=_sf_cbs)
-
         initial_state = AgentState(messages=[HumanMessage(content=query)], loop_count=0, max_iterations=max_iterations)
 
-        logger.info(f"Starting graph invocation...")
-        final_state = self.graph.invoke(initial_state, config)
-        logger.info(f"Graph invocation completed")
-
-        if _sf_cbs:
-            flush_callbacks(_sf_cbs)
+        ctx_mgr = _subflow_context(self._system_prompt_template.format().content) if _subflow_context else nullcontext([])
+        with ctx_mgr as sf_cbs:
+            config = RunnableConfig(configurable={"thread_id": thread_id}, callbacks=sf_cbs)
+            logger.info(f"Starting graph invocation...")
+            final_state = self.graph.invoke(initial_state, config)
+            logger.info(f"Graph invocation completed")
 
         result = final_state['messages'][-1].content
         logger.info(f"Query result extracted, result length: {len(result)} characters")

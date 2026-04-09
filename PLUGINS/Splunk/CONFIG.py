@@ -1,4 +1,0 @@
-SPLUNK_HOST = "localhost"
-SPLUNK_PORT = 8089
-SPLUNK_USER = ""
-SPLUNK_PASS = ""

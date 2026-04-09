@@ -189,3 +189,6 @@ PLUGINS/Embeddings/db/*
 
 .claude/*
 .vscode/*
+
+# Plugin configs are developer-local (copy from CONFIG.example.py)
+**/CONFIG.py

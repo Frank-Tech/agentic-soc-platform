@@ -646,12 +646,3 @@ class Notice(object):
         for user in users:
             result = requests.post(SIRP_NOTICE_WEBHOOK, json={"title": title, "body": body, "user": user.fullname})
         return True
-
-
-import os as _os
-if _os.getenv("ASP_SKIP_SIRP"):
-    @staticmethod
-    def _noop_send(user, title, body=None):
-        return True
-
-    Notice.send = _noop_send

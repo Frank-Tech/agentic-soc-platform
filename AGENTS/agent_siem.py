@@ -1,4 +1,5 @@
 import uuid
+from contextlib import nullcontext
 from typing import Annotated, List, Literal, Any
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -13,6 +14,11 @@ from Lib.baseplaybook import LanggraphPlaybook
 from Lib.log import logger
 from PLUGINS.LLM.llmapi import LLMAPI
 from PLUGINS.SIEM.tools import SIEMToolKit
+
+try:
+    from babelfish_adapter.core.context import subflow_context as _subflow_context
+except ImportError:
+    _subflow_context = None
 
 # Define constants for graph nodes
 AGENT_NODE = "AGENT"
@@ -156,44 +162,15 @@ class GraphAgent(LanggraphPlaybook):
         """Executes a query against the graph."""
         self.logger.debug(f"SIEM Query: {query}")
 
-        _sf_cbs = []
-        _sf_token = None
-        try:
-            from babelfish_adapter.babelfish_context import (
-                babelfish_context, get_subflow_callbacks, flush_callbacks, get_subflow_server_context,
-            )
-            sys_msg_content = self._system_prompt_template.format().content
-            _sf_cbs = get_subflow_callbacks(sys_msg_content)
-
-            # Override babelfish_context so this subflow gets its own X-Session-ID
-            sf_ctx = get_subflow_server_context(sys_msg_content)
-            if sf_ctx:
-                parent_ctx = babelfish_context.get()
-                if parent_ctx:
-                    _sf_token = babelfish_context.set({**parent_ctx, "session_id": sf_ctx["session_id"]})
-        except Exception:
-            pass
-
         thread_id = str(uuid.uuid4())
-        config = RunnableConfig(configurable={"thread_id": thread_id}, callbacks=_sf_cbs)
-        self.logger.debug(f"RunnableConfig created with thread_id: {self.module_name}")
-
         initial_state = AgentState(messages=[HumanMessage(content=query)], loop_count=0, max_iterations=max_iterations)
-        self.logger.debug(f"Initial state created")
 
-        self.logger.info(f"Starting graph invocation...")
-        try:
+        ctx_mgr = _subflow_context(self._system_prompt_template.format().content) if _subflow_context else nullcontext([])
+        with ctx_mgr as sf_cbs:
+            config = RunnableConfig(configurable={"thread_id": thread_id}, callbacks=sf_cbs)
+            self.logger.info(f"Starting graph invocation...")
             final_state = self.graph.invoke(initial_state, config)
-        finally:
-            if _sf_token is not None:
-                try:
-                    babelfish_context.reset(_sf_token)
-                except ValueError:
-                    pass
-        self.logger.info(f"Graph invocation completed")
-
-        if _sf_cbs:
-            flush_callbacks(_sf_cbs)
+            self.logger.info(f"Graph invocation completed")
 
         result = final_state['messages'][-1].content
         self.logger.debug(f"Query result: ")
