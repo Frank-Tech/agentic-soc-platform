@@ -171,6 +171,14 @@ _DATA_DIR_OVERRIDES = {
     "threat_hunting": "Case_Threat_Hunting_Agent",
 }
 
+# Sub-agents (used as tools by parent playbooks) — Python module name → DATA dir.
+# Required because Python modules are snake_case but DATA dirs are PascalCase,
+# which matters on case-sensitive filesystems (Linux).
+_SUBAGENT_DATA_DIR_OVERRIDES = {
+    "agent_siem": "Agent_SIEM",
+    "agent_threat_intelligence": "Agent_Threat_Intelligence",
+}
+
 _entries_cache: Dict[str, Type[LanggraphPlaybook]] = {}
 
 
@@ -190,6 +198,14 @@ def _load_entries() -> Dict[str, Type[LanggraphPlaybook]]:
 
     _patch_module_name(L3WithToolsPlaybook, _DATA_DIR_OVERRIDES["l3_with_tools"])
     _patch_module_name(ThreatHuntingPlaybook, _DATA_DIR_OVERRIDES["threat_hunting"])
+
+    # Patch sub-agent classes too — they use load_system_prompt_template
+    # which derives the path from self.module_name (Python module name).
+    from AGENTS.agent_siem import GraphAgent as SiemGraphAgent
+    from AGENTS.agent_threat_intelligence import GraphAgent as ThreatIntelGraphAgent
+
+    _patch_module_name(SiemGraphAgent, _SUBAGENT_DATA_DIR_OVERRIDES["agent_siem"])
+    _patch_module_name(ThreatIntelGraphAgent, _SUBAGENT_DATA_DIR_OVERRIDES["agent_threat_intelligence"])
 
     _entries_cache["l3_with_tools"] = L3WithToolsPlaybook
     _entries_cache["threat_hunting"] = ThreatHuntingPlaybook
