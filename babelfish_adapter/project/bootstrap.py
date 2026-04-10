@@ -68,8 +68,16 @@ def _stub_django_cache() -> None:
 # CONFIG.py files, we inject them into sys.modules before any PLUGIN is imported.
 # This keeps the repo clean — developers create their own CONFIG.py from
 # CONFIG.example.py for real usage.
+#
+# Service endpoints (ELK, Qdrant, Redis, SIRP) are read from environment
+# variables so deployments can point them at real services when needed
+# (e.g., containerized test runs where "localhost" isn't reachable).
 
 def _stub_config_modules() -> None:
+    elk_host = os.environ.get("ELK_HOST", "http://localhost:9200")
+    elk_user = os.environ.get("ELK_USER", "")
+    elk_pass = os.environ.get("ELK_PASS", "")
+
     configs = {
         "PLUGINS.LLM.CONFIG": {
             "LLM_CONFIGS": [
@@ -77,60 +85,60 @@ def _stub_config_modules() -> None:
                     "type": "openai",
                     "api_key": "sk-adapter-dummy",
                     "base_url": "https://api.openai.com/v1",
-                    "model": "gpt-4o",
+                    "model": os.environ.get("ASP_ADAPTER_MODEL", "gpt-4o"),
                     "proxy": None,
                     "tags": ["cheap", "fast", "powerful", "function_calling", "structured_output"],
                 }
             ],
         },
         "PLUGINS.SIRP.CONFIG": {
-            "SIRP_URL": "http://localhost:0",
-            "SIRP_APPKEY": "adapter-stub",
-            "SIRP_SIGN": "adapter-stub",
-            "SIRP_NOTICE_WEBHOOK": "http://localhost:0/stub",
+            "SIRP_URL": os.environ.get("SIRP_URL", "http://localhost:0"),
+            "SIRP_APPKEY": os.environ.get("SIRP_APPKEY", "adapter-stub"),
+            "SIRP_SIGN": os.environ.get("SIRP_SIGN", "adapter-stub"),
+            "SIRP_NOTICE_WEBHOOK": os.environ.get("SIRP_NOTICE_WEBHOOK", "http://localhost:0/stub"),
         },
         "PLUGINS.SIEM.CONFIG": {
-            "ELK_HOST": "http://localhost:9200",
-            "ELK_USER": "",
-            "ELK_PASS": "",
-            "SPLUNK_HOST": "localhost",
-            "SPLUNK_PORT": 8089,
-            "SPLUNK_USER": "",
-            "SPLUNK_PASS": "",
+            "ELK_HOST": elk_host,
+            "ELK_USER": elk_user,
+            "ELK_PASS": elk_pass,
+            "SPLUNK_HOST": os.environ.get("SPLUNK_HOST", "localhost"),
+            "SPLUNK_PORT": int(os.environ.get("SPLUNK_PORT", "8089")),
+            "SPLUNK_USER": os.environ.get("SPLUNK_USER", ""),
+            "SPLUNK_PASS": os.environ.get("SPLUNK_PASS", ""),
         },
         "PLUGINS.ELK.CONFIG": {
-            "ELK_HOST": "http://localhost:9200",
-            "ELK_USER": "",
-            "ELK_PASS": "",
-            "ACTION_INDEX_NAME": "siem-alert",
-            "POLL_INTERVAL_MINUTES": 5,
+            "ELK_HOST": elk_host,
+            "ELK_USER": elk_user,
+            "ELK_PASS": elk_pass,
+            "ACTION_INDEX_NAME": os.environ.get("ACTION_INDEX_NAME", "siem-alert"),
+            "POLL_INTERVAL_MINUTES": int(os.environ.get("POLL_INTERVAL_MINUTES", "5")),
         },
         "PLUGINS.Qdrant.CONFIG": {
-            "QDRANT_URL": "http://localhost:6333",
-            "QDRANT_API_KEY": "",
+            "QDRANT_URL": os.environ.get("QDRANT_URL", "http://localhost:6333"),
+            "QDRANT_API_KEY": os.environ.get("QDRANT_API_KEY", ""),
         },
         "PLUGINS.Embeddings.CONFIG": {
-            "EMBEDDINGS_TYPE": "ollama",
-            "EMBEDDINGS_API_KEY": "stub",
-            "EMBEDDINGS_BASE_URL": "http://localhost:0",
-            "EMBEDDINGS_MODEL": "stub",
-            "EMBEDDINGS_PROXY": "",
-            "EMBEDDINGS_SIZE": 1024,
+            "EMBEDDINGS_TYPE": os.environ.get("EMBEDDINGS_TYPE", "ollama"),
+            "EMBEDDINGS_API_KEY": os.environ.get("EMBEDDINGS_API_KEY", "stub"),
+            "EMBEDDINGS_BASE_URL": os.environ.get("EMBEDDINGS_BASE_URL", "http://localhost:0"),
+            "EMBEDDINGS_MODEL": os.environ.get("EMBEDDINGS_MODEL", "stub"),
+            "EMBEDDINGS_PROXY": os.environ.get("EMBEDDINGS_PROXY", ""),
+            "EMBEDDINGS_SIZE": int(os.environ.get("EMBEDDINGS_SIZE", "1024")),
         },
         "PLUGINS.AlienVaultOTX.CONFIG": {
-            "HTTP_PROXY": None,
-            "API_KEY": "",
+            "HTTP_PROXY": os.environ.get("OTX_HTTP_PROXY") or None,
+            "API_KEY": os.environ.get("OTX_API_KEY", ""),
         },
         "PLUGINS.Splunk.CONFIG": {
-            "SPLUNK_HOST": "localhost",
-            "SPLUNK_PORT": 8089,
-            "SPLUNK_USER": "",
-            "SPLUNK_PASS": "",
+            "SPLUNK_HOST": os.environ.get("SPLUNK_HOST", "localhost"),
+            "SPLUNK_PORT": int(os.environ.get("SPLUNK_PORT", "8089")),
+            "SPLUNK_USER": os.environ.get("SPLUNK_USER", ""),
+            "SPLUNK_PASS": os.environ.get("SPLUNK_PASS", ""),
         },
         "PLUGINS.Redis.CONFIG": {
-            "REDIS_URL": "redis://localhost:6379/",
-            "REDIS_STREAM_MAX_LENGTH": 10000,
-            "REDIS_MAX_CONNECTIONS": 10,
+            "REDIS_URL": os.environ.get("REDIS_URL", "redis://localhost:6379/"),
+            "REDIS_STREAM_MAX_LENGTH": int(os.environ.get("REDIS_STREAM_MAX_LENGTH", "10000")),
+            "REDIS_MAX_CONNECTIONS": int(os.environ.get("REDIS_MAX_CONNECTIONS", "10")),
         },
     }
 

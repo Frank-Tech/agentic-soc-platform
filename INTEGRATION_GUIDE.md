@@ -181,8 +181,24 @@ OPENAI_BASE_URL=https://babel-fish.tai42.nexus/openai/v1
 CLIENT_LANGFUSE_PUBLIC_KEY=<from lexus-test>
 CLIENT_LANGFUSE_SECRET_KEY=<from lexus-test>
 CLIENT_LANGFUSE_HOST=<from lexus-test>
+
+# ASP-specific
+ASP_SKIP_SIRP=1
 ASP_ADAPTER_MODEL=gpt-4o
 ```
+
+**Overriding service endpoints** — The CONFIG stubs in `project/bootstrap.py` read
+endpoints from env vars. If you're running the adapter inside a container where
+`localhost` doesn't reach the host, set the real service URLs:
+```
+ELK_HOST=http://asp-elasticsearch:9200   # or http://host.docker.internal:9200
+ELK_USER=
+ELK_PASS=
+QDRANT_URL=http://asp-qdrant:6333
+REDIS_URL=redis://:password@asp-redis:6379/
+```
+Every CONFIG variable in `_stub_config_modules()` has an `os.environ.get()` fallback
+to its default, so you only need to set the ones you want to override.
 
 ### 7. Register with lexus-test
 
