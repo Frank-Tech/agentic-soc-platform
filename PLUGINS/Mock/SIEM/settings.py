@@ -9,6 +9,7 @@ MALICIOUS_PERCENTAGE = 0.05  # 5% 的日志为恶意/异常日志
 NET_INDEX = "siem-network-traffic"
 HOST_INDEX = "siem-host-events"
 CLOUD_INDEX = "siem-aws-cloudtrail"
+WAF_INDEX = "siem-waf-logs"
 
 # 实体池
 # --- 基础实体扩展 ---

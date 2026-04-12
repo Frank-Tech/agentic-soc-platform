@@ -22,9 +22,11 @@ from PLUGINS.Mock.SIEM import settings
 from PLUGINS.Mock.SIEM.generator.cloud import CloudGenerator
 from PLUGINS.Mock.SIEM.generator.host import HostGenerator
 from PLUGINS.Mock.SIEM.generator.network import NetworkGenerator
+from PLUGINS.Mock.SIEM.generator.waf import WAFGenerator
 from PLUGINS.Mock.SIEM.scenarios.cloud import CloudPrivilegeEscalationScenario
 from PLUGINS.Mock.SIEM.scenarios.host import RansomwareScenario
 from PLUGINS.Mock.SIEM.scenarios.network import BruteForceScenario
+from PLUGINS.Mock.SIEM.scenarios.waf import SQLInjectionScenario
 
 
 def _auth():
@@ -68,6 +70,7 @@ def main():
         (settings.NET_INDEX, NetworkGenerator, BruteForceScenario),
         (settings.HOST_INDEX, HostGenerator, RansomwareScenario),
         (settings.CLOUD_INDEX, CloudGenerator, CloudPrivilegeEscalationScenario),
+        (settings.WAF_INDEX, WAFGenerator, SQLInjectionScenario),
     ]
 
     with httpx.Client(verify=False, timeout=60.0) as client:

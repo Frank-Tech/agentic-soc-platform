@@ -1,0 +1,124 @@
+name: siem-waf-logs
+backend: ELK
+description: Web Application Firewall logs
+
+fields:
+  - name: "@timestamp"
+    type: date
+    description: Event time
+    is_key_field: false
+
+  - name: event.dataset
+    type: keyword
+    description: Dataset (waf)
+    is_key_field: false
+
+  - name: event.module
+    type: keyword
+    description: Module (waf)
+    is_key_field: false
+
+  - name: event.category
+    type: keyword
+    description: Event category (web, intrusion_detection)
+    is_key_field: true
+
+  - name: event.action
+    type: keyword
+    description: Action taken (blocked, allowed, logged)
+    is_key_field: true
+
+  - name: event.outcome
+    type: keyword
+    description: Outcome (success/failure)
+    is_key_field: true
+
+  - name: rule.id
+    type: keyword
+    description: WAF rule ID
+    is_key_field: true
+
+  - name: rule.name
+    type: keyword
+    description: WAF rule name
+    is_key_field: true
+
+  - name: rule.category
+    type: keyword
+    description: Attack category (sqli, xss, rfi, lfi, rce, scanner)
+    is_key_field: true
+
+  - name: http.request.method
+    type: keyword
+    description: HTTP method (GET, POST, PUT, DELETE)
+    is_key_field: true
+
+  - name: http.request.path
+    type: keyword
+    description: Request URI path
+    is_key_field: false
+
+  - name: http.request.query
+    type: text
+    description: Query string
+    is_key_field: false
+
+  - name: http.request.body
+    type: text
+    description: Request body (truncated)
+    is_key_field: false
+
+  - name: http.response.status_code
+    type: long
+    description: HTTP response status code
+    is_key_field: true
+
+  - name: http.version
+    type: keyword
+    description: HTTP version
+    is_key_field: false
+
+  - name: source.ip
+    type: ip
+    description: Client IP
+    is_key_field: true
+
+  - name: source.geo.country_name
+    type: keyword
+    description: Client country
+    is_key_field: true
+
+  - name: source.geo.country_iso_code
+    type: keyword
+    description: Client country ISO code
+    is_key_field: false
+
+  - name: destination.ip
+    type: ip
+    description: Server IP
+    is_key_field: false
+
+  - name: destination.port
+    type: long
+    description: Server port
+    is_key_field: false
+
+  - name: url.domain
+    type: keyword
+    description: Target hostname
+    is_key_field: true
+
+  - name: user_agent.original
+    type: text
+    description: User-Agent string
+    is_key_field: false
+
+  - name: threat.indicator.confidence
+    type: keyword
+    description: Confidence level (low, medium, high, critical)
+    is_key_field: true
+
+  - name: log.level
+    type: keyword
+    description: Log level
+    is_key_field: false
