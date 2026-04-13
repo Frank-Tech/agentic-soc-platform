@@ -59,7 +59,6 @@ async def run(
     trace_id: str,
     flow_id: str,
     payload_name: str,
-    trace_mapping: dict | None = None,
     subflow_server_ids: dict | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Execute a flow and yield LangGraph-style steps.             KEEP AS-IS
@@ -69,7 +68,7 @@ async def run(
       2. Builds Langfuse callbacks
       3. Sets babelfish_context (so all LLM calls are routed correctly)
       4. Calls YOUR execute_flow() to do the actual work
-      5. Collects trace metadata from Langfuse handlers
+      5. Collects per-invocation subflow trace records
       6. Yields __trace_metadata__ for lexus-test
       7. Cleans up (flushes Langfuse, resets context)
 
@@ -80,7 +79,7 @@ async def run(
 
     callbacks, main_handler = _build_langfuse_callbacks(trace_id)
 
-    subflow_handlers: dict = {}
+    subflow_invocations: list = []
     token = babelfish_context.set(
         {
             "mode": mode,
@@ -88,9 +87,8 @@ async def run(
             "trace_id": trace_id,
             "flow_id": flow_id,
             "callbacks": callbacks,
-            "trace_mapping": trace_mapping or {},
-            "subflow_handlers": subflow_handlers,
             "subflow_server_ids": subflow_server_ids or {},
+            "subflow_invocations": subflow_invocations,
         }
     )
 
@@ -103,21 +101,16 @@ async def run(
         ):
             yield step
 
-        # ── Collect actual trace IDs from Langfuse handlers ──
         actual_trace_id = (
             main_handler.last_trace_id if main_handler and main_handler.last_trace_id
             else trace_id
         )
-        subflow_trace_ids = {}
-        for content_key, h in subflow_handlers.items():
-            if hasattr(h, "last_trace_id") and h.last_trace_id:
-                subflow_trace_ids[content_key] = h.last_trace_id
 
         yield {
             "__trace_metadata__": {
                 "client_trace_id": actual_trace_id,
                 "server_trace_id": session_id.replace("-", ""),
-                "subflow_trace_ids": subflow_trace_ids,
+                "subflow_invocations": subflow_invocations,
             }
         }
     finally:
@@ -410,8 +403,9 @@ def list_flow_groups() -> List[Dict]:
     """Return flow/subflow metadata for trace mapping.               CUSTOMIZE
 
     Called by lexus-test to discover subflows and their system prompts.
-    lexus-test uses system_message content as keys in trace_mapping and
-    subflow_server_ids, enabling per-subflow trace separation.
+    lexus-test uses system_message content as keys in subflow_server_ids,
+    enabling per-subflow trace separation (fresh trace/session IDs per
+    invocation are generated inside the subflow_context manager).
     """
     result = []
     for group in _FLOW_GROUPS:

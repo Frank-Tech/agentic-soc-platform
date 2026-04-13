@@ -36,13 +36,12 @@ from typing import Optional, TypedDict
 
 class BabelfishContextData(TypedDict):
     mode: str                  # "baseline" | "babelfish"
-    session_id: str            # UUID4 — used as X-Session-ID header
-    trace_id: str              # client trace ID for Langfuse
+    session_id: str            # UUID4 — used as X-Session-ID header (overridden per subflow invocation)
+    trace_id: str              # client trace ID for Langfuse (main flow)
     flow_id: str               # X-Flow-ID header for babelfish routing
     callbacks: list            # Langfuse CallbackHandler instances for the main flow
-    trace_mapping: dict        # system_message_content → trace_id (for subflow tracing)
-    subflow_handlers: dict     # system_message_content → CallbackHandler (populated at runtime)
-    subflow_server_ids: dict   # system_message_content → msg_hash (for subflow session isolation)
+    subflow_server_ids: dict   # system_message_content → msg_hash (identifies tracked subflows)
+    subflow_invocations: list  # accumulator: list[{msg_hash, client_trace_id, server_session_id}]
 
 
 babelfish_context: contextvars.ContextVar[Optional[BabelfishContextData]] = contextvars.ContextVar(
@@ -51,40 +50,23 @@ babelfish_context: contextvars.ContextVar[Optional[BabelfishContextData]] = cont
 
 
 # ── Subflow Helpers ───────────────────────────────────────────────────────────
-# These functions are used by sub-agents to get their own Langfuse trace and
-# session_id. The trace_mapping and subflow_server_ids are populated by the
-# testing platform (lexus-test) and passed through the adapter's run().
+# These functions are used by subflow_context() below. The subflow_server_ids
+# dict (system_message_content → msg_hash) is populated by lexus-test and
+# passed through the adapter's run(); it identifies which system messages
+# correspond to tracked subflows. Fresh IDs are generated per invocation so
+# parallel calls (e.g. LangGraph Send fan-out) produce distinct traces.
 
-def get_subflow_server_context(system_message_content: str) -> dict | None:
-    """Derive a unique session_id for a subflow based on its system prompt.
-
-    Returns {"session_id": str} if a mapping exists, None otherwise.
-    The derived session_id ensures each subflow gets its own server-side trace.
-    """
-    import uuid as _uuid
+def _is_tracked_subflow(system_message_content: str) -> str | None:
+    """Return the msg_hash if this system message is a tracked subflow, else None."""
     ctx = babelfish_context.get()
     if not ctx:
         return None
     server_ids = ctx.get("subflow_server_ids", {})
-    sf_key = server_ids.get(system_message_content)
-    if not sf_key:
-        return None
-    sf_session_id = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, f"{ctx['session_id']}-{sf_key}"))
-    return {"session_id": sf_session_id}
+    return server_ids.get(system_message_content)
 
 
-def get_subflow_callbacks(system_message_content: str) -> list:
-    """Create Langfuse callbacks for a subflow, keyed by its system prompt content.
-
-    The trace_mapping (system_message_content → trace_id) is provided by lexus-test
-    so each subflow gets a separate Langfuse trace.
-    """
-    ctx = babelfish_context.get()
-    if not ctx:
-        return []
-    trace_id = ctx.get("trace_mapping", {}).get(system_message_content)
-    if not trace_id:
-        return []
+def _build_subflow_callback(client_trace_id: str) -> list:
+    """Build a fresh Langfuse CallbackHandler for a single subflow invocation."""
     pub = os.environ.get("CLIENT_LANGFUSE_PUBLIC_KEY")
     sec = os.environ.get("CLIENT_LANGFUSE_SECRET_KEY")
     host = os.environ.get("CLIENT_LANGFUSE_HOST")
@@ -94,9 +76,7 @@ def get_subflow_callbacks(system_message_content: str) -> list:
         from langfuse import Langfuse
         from langfuse.langchain import CallbackHandler
         Langfuse(public_key=pub, secret_key=sec, base_url=host)
-        handler = CallbackHandler(public_key=pub, trace_context={"trace_id": trace_id})
-        subflow_handlers = ctx.get("subflow_handlers", {})
-        subflow_handlers[system_message_content] = handler
+        handler = CallbackHandler(public_key=pub, trace_context={"trace_id": client_trace_id})
         return [handler]
     except Exception:
         return []
@@ -124,28 +104,49 @@ def flush_callbacks(callbacks: list) -> None:
 def subflow_context(system_message_content: str):
     """Context manager for sub-agent babelfish integration.
 
-    Handles:
-    1. Creating Langfuse callbacks for this subflow's trace
-    2. Overriding session_id so this subflow gets its own server-side trace
-    3. Cleaning up (resetting context, flushing callbacks) on exit
+    On every entry, generates fresh per-invocation IDs:
+      - client_trace_id (uuid4) for a new Langfuse client trace
+      - server_session_id (uuid4) sent as X-Session-ID so holy-grail creates
+        a distinct server trace
 
-    Yields the list of callbacks to pass to RunnableConfig.
+    The invocation is recorded in ``ctx["subflow_invocations"]`` so the
+    adapter can return the full list to lexus-test (which polls each trace
+    and creates one run record per invocation).
+
+    This is safe for parallel fan-out (LangGraph Send) because:
+      - ContextVars are copied per asyncio task, so each task's session_id
+        override is isolated
+      - list.append() is atomic under the GIL
     """
-    callbacks = get_subflow_callbacks(system_message_content)
-    token = None
+    import uuid as _uuid
 
-    sf_ctx = get_subflow_server_context(system_message_content)
-    if sf_ctx:
-        parent_ctx = babelfish_context.get()
-        if parent_ctx:
-            token = babelfish_context.set({**parent_ctx, "session_id": sf_ctx["session_id"]})
+    parent_ctx = babelfish_context.get()
+    if not parent_ctx:
+        yield []
+        return
 
+    msg_hash = _is_tracked_subflow(system_message_content)
+    if not msg_hash:
+        # Not a tracked subflow — no callbacks, no session override.
+        yield []
+        return
+
+    client_trace_id = str(_uuid.uuid4()).replace("-", "")
+    server_session_id = str(_uuid.uuid4())
+
+    parent_ctx["subflow_invocations"].append({
+        "msg_hash": msg_hash,
+        "client_trace_id": client_trace_id,
+        "server_session_id": server_session_id,
+    })
+
+    callbacks = _build_subflow_callback(client_trace_id)
+    token = babelfish_context.set({**parent_ctx, "session_id": server_session_id})
     try:
         yield callbacks
     finally:
-        if token is not None:
-            try:
-                babelfish_context.reset(token)
-            except ValueError:
-                pass
+        try:
+            babelfish_context.reset(token)
+        except ValueError:
+            pass
         flush_callbacks(callbacks)
