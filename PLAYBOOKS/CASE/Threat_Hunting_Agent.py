@@ -5,7 +5,6 @@ from typing import Annotated, Dict, List
 
 from langchain_core.messages import AnyMessage, ToolMessage, AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.config import patch_config
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
@@ -469,30 +468,25 @@ class Playbook(LanggraphPlaybook):
 
         # --- Encapsulate Subgraph call ---
         def run_analyst_subgraph(state: AnalystState):
-            """Every analyst_subgraph invocation mints its own session_id so
-            that parallel Send() fan-out calls never collide on the babelfish
-            checkpointer (bug D).
+            """Every analyst_subgraph invocation mints its own session_id.
 
-            The subgraph config is built via ``patch_config`` to MERGE our
-            session_id override onto the ambient parent config — creating a
-            fresh RunnableConfig from scratch would wipe langgraph's internal
-            configurable keys (``checkpoint_ns`` etc.) and break downstream
-            graph dispatch.
+            ``continue_to_analysts`` dispatches this node via ``Send`` fan-out —
+            i.e. several invocations run concurrently in the same task. Each
+            invocation is logically a distinct subflow run, so each MUST carry
+            a distinct ``session_id`` (otherwise babelfish's thread_id collides
+            on the checkpointer and raises "Flow paused without an interrupt").
             """
             self.logger.debug("Running Analyst Subgraph Wrapper")
 
             if _mint_flow_session is not None:
                 analyst_system_message = self.load_system_prompt_template("Analyst_System", lang=PROMPT_LANG).format().content
-                subflow_session_id, _sf_cbs = _mint_flow_session(analyst_system_message)
+                subflow_session_id, sf_cbs = _mint_flow_session(analyst_system_message)
             else:
-                subflow_session_id, _sf_cbs = str(uuid.uuid4()), []
+                subflow_session_id, sf_cbs = str(uuid.uuid4()), []
 
-            subgraph_config = patch_config(
-                None,
-                configurable={
-                    "thread_id": subflow_session_id,
-                    "session_id": subflow_session_id,
-                },
+            subgraph_config = RunnableConfig(
+                configurable={"thread_id": subflow_session_id, "session_id": subflow_session_id},
+                callbacks=sf_cbs,
             )
             result: dict = self.analyst_graph.invoke(state, subgraph_config)
             analyst_state = AnalystState(**result)
