@@ -3,6 +3,7 @@ from typing import Annotated, List, Literal, Any
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.config import patch_config
 from langgraph.graph import END, StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
@@ -173,13 +174,16 @@ class GraphAgent(LanggraphPlaybook):
         initial_state = AgentState(messages=[HumanMessage(content=query)], loop_count=0, max_iterations=max_iterations)
 
         if _mint_flow_session is not None:
-            session_id, sf_cbs = _mint_flow_session(self._system_prompt_template.format().content)
+            session_id, _sf_cbs = _mint_flow_session(self._system_prompt_template.format().content)
         else:
-            session_id, sf_cbs = str(uuid.uuid4()), []
+            session_id, _sf_cbs = str(uuid.uuid4()), []
 
-        config = RunnableConfig(
+        # patch_config merges our session_id override onto the ambient parent
+        # config — creating a fresh RunnableConfig would wipe langgraph's
+        # internal configurable keys and break downstream graph dispatch.
+        config = patch_config(
+            None,
             configurable={"thread_id": session_id, "session_id": session_id},
-            callbacks=sf_cbs,
         )
         self.logger.info(f"Starting graph invocation...")
         final_state = self.graph.invoke(initial_state, config)
