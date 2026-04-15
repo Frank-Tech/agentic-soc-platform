@@ -55,8 +55,6 @@ def _build_langfuse_callbacks(trace_id: str) -> tuple[list, object | None]:
 async def run(
     *,
     mode: str,
-    session_id: str,
-    trace_id: str,
     flow_id: str,
     payload_name: str,
     subflow_server_ids: dict | None = None,
@@ -65,28 +63,35 @@ async def run(
 
     This is the generic run wrapper. It:
       1. Validates mode
-      2. Builds Langfuse callbacks
-      3. Sets babelfish_context (so all LLM calls are routed correctly)
-      4. Calls YOUR execute_flow() to do the actual work
-      5. Collects per-invocation subflow trace records
-      6. Yields __trace_metadata__ for lexus-test
-      7. Cleans up (flushes Langfuse, resets context)
+      2. Mints the parent flow's session_id (UUID4) and Langfuse trace_id
+      3. Builds Langfuse callbacks for the parent flow
+      4. Sets babelfish_context (mode / flow_id / subflow bookkeeping only —
+         session_id is NOT in the context; every flow role mints its own and
+         passes it explicitly to LLMAPI.get_model)
+      5. Calls YOUR execute_flow() to do the actual work
+      6. Collects per-invocation subflow trace records
+      7. Yields __trace_metadata__ with the parent session_id + subflows
+      8. Cleans up (flushes Langfuse, resets context)
 
     The only project-specific part is execute_flow() — see PART 2 below.
+
+    lexus-test no longer pre-mints a session_id and passes it in; the adapter
+    owns minting and reports every session back via ``__trace_metadata__``.
     """
     if mode not in ("baseline", "babelfish"):
         raise ValueError(f"Invalid mode: {mode}. Expected 'baseline' or 'babelfish'.")
 
-    callbacks, main_handler = _build_langfuse_callbacks(trace_id)
+    # Parent flow's identity — minted here, reported back via __trace_metadata__.
+    parent_session_id = str(uuid.uuid4())
+    parent_client_trace_id = str(uuid.uuid4()).replace("-", "")
+
+    callbacks, main_handler = _build_langfuse_callbacks(parent_client_trace_id)
 
     subflow_invocations: list = []
     token = babelfish_context.set(
         {
             "mode": mode,
-            "session_id": session_id,
-            "trace_id": trace_id,
             "flow_id": flow_id,
-            "callbacks": callbacks,
             "subflow_server_ids": subflow_server_ids or {},
             "subflow_invocations": subflow_invocations,
         }
@@ -96,20 +101,21 @@ async def run(
         # ── This is the only line that calls your project's code ──
         async for step in execute_flow(
             payload_name=payload_name,
-            session_id=session_id,
+            session_id=parent_session_id,
             callbacks=callbacks,
         ):
             yield step
 
         actual_trace_id = (
             main_handler.last_trace_id if main_handler and main_handler.last_trace_id
-            else trace_id
+            else parent_client_trace_id
         )
 
         yield {
             "__trace_metadata__": {
+                "session_id": parent_session_id,
                 "client_trace_id": actual_trace_id,
-                "server_trace_id": session_id.replace("-", ""),
+                "server_trace_id": parent_session_id.replace("-", ""),
                 "subflow_invocations": subflow_invocations,
             }
         }
@@ -368,7 +374,10 @@ async def execute_flow(
         playbook = PlaybookClass()
         playbook._playbook_model = playbook_model
 
-        config = RunnableConfig(configurable={"thread_id": session_id}, callbacks=callbacks)
+        config = RunnableConfig(
+            configurable={"thread_id": session_id, "session_id": session_id},
+            callbacks=callbacks,
+        )
 
         from Lib.llmapi import BaseAgentState
 
@@ -404,8 +413,9 @@ def list_flow_groups() -> List[Dict]:
 
     Called by lexus-test to discover subflows and their system prompts.
     lexus-test uses system_message content as keys in subflow_server_ids,
-    enabling per-subflow trace separation (fresh trace/session IDs per
-    invocation are generated inside the subflow_context manager).
+    enabling per-subflow trace separation. Each subflow entry point mints
+    its own UUID4 session_id via ``mint_flow_session()`` (see
+    ``babelfish_adapter/core/context.py``).
     """
     result = []
     for group in _FLOW_GROUPS:

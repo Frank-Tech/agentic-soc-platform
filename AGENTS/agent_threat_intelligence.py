@@ -1,5 +1,4 @@
 import uuid
-from contextlib import nullcontext
 from typing import Annotated, Literal, Any, List
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -15,9 +14,9 @@ from PLUGINS.AlienVaultOTX.alienvaultotx import AlienVaultOTX
 from PLUGINS.LLM.llmapi import LLMAPI
 
 try:
-    from babelfish_adapter.core.context import subflow_context as _subflow_context
+    from babelfish_adapter.core.context import mint_flow_session as _mint_flow_session
 except ImportError:
-    _subflow_context = None
+    _mint_flow_session = None
 
 AGENT_NODE = "AGENT"
 TOOL_NODE = "TOOL_NODE"
@@ -79,15 +78,19 @@ class GraphAgent(LanggraphPlaybook):
             logger.debug(f"No tool calls detected, ending agent execution")
             return END
 
-        def agent_node(state: AgentState):
+        def agent_node(state: AgentState, config: RunnableConfig):
             logger.debug(f"Agent Node Invoked (Loop: {state.loop_count})")
+
+            session_id = config["configurable"]["session_id"]
 
             system_message = self._system_prompt_template
 
             messages = [system_message.format(), *state.messages]
 
-            llm_base = self._llm_api.get_model(tag=["fast"])
-            llm_with_tools = self._llm_api.get_model(tag=["fast", "function_calling"]).bind_tools(tools)
+            llm_base = self._llm_api.get_model(tag=["fast"], session_id=session_id)
+            llm_with_tools = self._llm_api.get_model(
+                tag=["fast", "function_calling"], session_id=session_id
+            ).bind_tools(tools)
 
             if state.loop_count >= state.max_iterations - 1:
                 stop_instruction = (
@@ -119,17 +122,24 @@ class GraphAgent(LanggraphPlaybook):
         return compiled_graph
 
     def threat_intelligence_query(self, query: str, max_iterations: int = MAX_ITERATIONS) -> str:
+        """Every invocation mints its own ``session_id`` so concurrent calls
+        never collide on the babelfish ``thread_id``."""
         logger.info(f"Threat Intelligence Query started: {query[:100]}...")
 
-        thread_id = str(uuid.uuid4())
         initial_state = AgentState(messages=[HumanMessage(content=query)], loop_count=0, max_iterations=max_iterations)
 
-        ctx_mgr = _subflow_context(self._system_prompt_template.format().content) if _subflow_context else nullcontext([])
-        with ctx_mgr as sf_cbs:
-            config = RunnableConfig(configurable={"thread_id": thread_id}, callbacks=sf_cbs)
-            logger.info(f"Starting graph invocation...")
-            final_state = self.graph.invoke(initial_state, config)
-            logger.info(f"Graph invocation completed")
+        if _mint_flow_session is not None:
+            session_id, sf_cbs = _mint_flow_session(self._system_prompt_template.format().content)
+        else:
+            session_id, sf_cbs = str(uuid.uuid4()), []
+
+        config = RunnableConfig(
+            configurable={"thread_id": session_id, "session_id": session_id},
+            callbacks=sf_cbs,
+        )
+        logger.info(f"Starting graph invocation...")
+        final_state = self.graph.invoke(initial_state, config)
+        logger.info(f"Graph invocation completed")
 
         result = final_state['messages'][-1].content
         logger.info(f"Query result extracted, result length: {len(result)} characters")

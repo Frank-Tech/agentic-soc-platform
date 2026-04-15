@@ -25,6 +25,12 @@ class LLMAPI(object):
     It automatically reads the configuration from CONFIG.py and initializes the corresponding backend.
     Supports dynamic selection of model configurations through tags.
     It throws exceptions directly when it encounters an error.
+
+    When running under the babelfish adapter, every call to ``get_model`` MUST
+    pass an explicit ``session_id``. There is no implicit default — the
+    previous ContextVar-based inheritance was removed to make collisions
+    between concurrent subflow invocations impossible (every role is now
+    responsible for minting its own UUID4 and passing it at the LLM call site).
     """
 
     def __init__(self, temperature: float = 0.0):
@@ -40,7 +46,13 @@ class LLMAPI(object):
         self.temperature = temperature
         self.alive = False
 
-    def get_model(self, tag: str | list[str] | None = None, **kwargs) -> ChatOpenAI | ChatOllama:
+    def get_model(
+        self,
+        tag: str | list[str] | None = None,
+        *,
+        session_id: str | None = None,
+        **kwargs,
+    ) -> ChatOpenAI | ChatOllama:
         """
         Gets and returns the corresponding LangChain ChatModel instance based on the tag.
 
@@ -49,11 +61,20 @@ class LLMAPI(object):
                 - str: Find the first configuration that contains this tag.
                 - list[str]: Find the first configuration that contains all of these tags.
                 - None: Use the first default configuration in the list.
+            session_id: REQUIRED when running under the babelfish adapter. The
+                UUID4 that will be sent as ``X-Session-ID`` and used as the
+                LangGraph ``thread_id``. Each flow role (parent flow, every
+                subflow) is responsible for minting its own fresh UUID4 and
+                passing it here — there is no implicit default from ContextVar
+                state. Pass ``None`` only when outside the adapter runtime
+                (tests, standalone scripts, native CLI usage).
             **kwargs: Allows overriding model parameters at call time (e.g., temperature, model).
 
         Raises:
             ValueError: If no configuration matching the specified tag (or list of tags) is found.
             ValueError: If the client_type in the configuration is not supported.
+            RuntimeError: If called inside a babelfish adapter context without
+                an explicit ``session_id``.
 
         Returns:
             ChatOpenAI | ChatOllama: LangChain's chat model instance.
@@ -94,13 +115,21 @@ class LLMAPI(object):
 
         ctx = _babelfish_context.get() if _babelfish_context is not None else None
         if ctx is not None:
+            if session_id is None:
+                raise RuntimeError(
+                    "LLMAPI.get_model() called inside a babelfish adapter context "
+                    "without an explicit session_id. Every flow role (parent flow, "
+                    "every subflow) must mint its own UUID4 and pass it explicitly "
+                    "to prevent X-Session-ID collisions between concurrent "
+                    "invocations. See babelfish_adapter/core/context.py."
+                )
             params["model"] = os.environ.get("ASP_ADAPTER_MODEL", "gpt-4o")
             params["api_key"] = os.environ["OPENAI_API_KEY"]
             params["http_client"] = None
             if ctx.get("mode") == "babelfish":
                 params["base_url"] = os.environ["OPENAI_BASE_URL"]
                 params["default_headers"] = {
-                    "X-Session-ID": ctx["session_id"],
+                    "X-Session-ID": session_id,
                     "X-Flow-ID": ctx["flow_id"],
                     "X-Api-Key": os.environ["NEXUS_API_KEY"],
                     "X-Auto-Approve": "true",

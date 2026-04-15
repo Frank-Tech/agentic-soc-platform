@@ -1,19 +1,28 @@
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Literal
 
 from pydantic import BaseModel, Field, field_validator
+
+from PLUGINS.SIEM.registry import _load_yaml_configs
 
 SUMMARY_THRESHOLD = 1000
 SAMPLE_THRESHOLD = 100
 SAMPLE_COUNT = 5
 
+# Valid SIEM index names, derived at import time from DATA/Plugin_SIEM_Indexes/*.yaml.
+# Surfaced to the LLM via JSON schema as an enum so the model cannot pass a hostname
+# (e.g. "DC01") or other free-text value where an index name is expected.
+_VALID_INDEX_NAMES: tuple[str, ...] = tuple(sorted(_load_yaml_configs().keys()))
+IndexNameType = Literal[_VALID_INDEX_NAMES]  # type: ignore[valid-type]
+
 
 # --- Input Models ---
 class SchemaExplorerInput(BaseModel):
-    target_index: Optional[str] = Field(
+    target_index: Optional[IndexNameType] = Field(
         default=None,
         description=(
             "Target index to explore. "
+            f"Must be one of: {', '.join(_VALID_INDEX_NAMES)}. "
             "If None: returns a list of all available indices with descriptions (list of dicts with 'name' and 'description'). "
             "If provided: returns detailed field metadata for that specific index (list of field schemas with 'name', 'type', 'description', etc.)"
         )
@@ -21,9 +30,9 @@ class SchemaExplorerInput(BaseModel):
 
 
 class AdaptiveQueryInput(BaseModel):
-    index_name: str = Field(
+    index_name: IndexNameType = Field(
         ...,
-        description="Target SIEM index/source name. Examples: 'logs-security', 'main', 'logs-endpoint'"
+        description=f"Target SIEM index name. Must be one of: {', '.join(_VALID_INDEX_NAMES)}."
     )
 
     time_field: str = Field(
@@ -105,13 +114,13 @@ class KeywordSearchInput(BaseModel):
         )
     )
 
-    index_name: Optional[str] = Field(
+    index_name: Optional[IndexNameType] = Field(
         default=None,
         description=(
-            "Target SIEM index/source name. "
+            "Target SIEM index name. "
+            f"Must be one of: {', '.join(_VALID_INDEX_NAMES)}. "
             "If None or empty: searches across all indices. "
-            "If provided: searches only in specified index. "
-            "Examples: 'logs-security', 'main', 'logs-endpoint'"
+            "If provided: searches only in specified index."
         )
     )
 

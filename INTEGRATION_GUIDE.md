@@ -152,24 +152,47 @@ if ctx is not None:
 >     llm = LLMAPI().get_model(tag=["fast"])  # fresh headers every time
 > ```
 
-### 5. Hook into sub-agents (if any, ~5 lines each)
+### 5. Hook into sub-agents (if any, ~8 lines each)
 
-If your flow has sub-agents that should get separate traces:
+Every sub-agent invocation — parent flow, every subflow, every parallel
+`Send()` fan-out — mints its **own** fresh `session_id` at entry and passes
+it explicitly to every `LLMAPI.get_model()` call in its scope. There is no
+inherited default, no ContextVar session override, and no "forgot to wrap"
+failure mode.
 
 ```python
-from contextlib import nullcontext
+import uuid
+from langchain_core.runnables import RunnableConfig
 
 try:
-    from babelfish_adapter.core.context import subflow_context as _subflow_context
+    from babelfish_adapter.core.context import mint_flow_session as _mint_flow_session
 except ImportError:
-    _subflow_context = None
+    _mint_flow_session = None
 
-# In your sub-agent's query method:
-ctx_mgr = _subflow_context(system_prompt_content) if _subflow_context else nullcontext([])
-with ctx_mgr as sf_cbs:
-    config = RunnableConfig(configurable={"thread_id": tid}, callbacks=sf_cbs)
-    result = self.graph.invoke(state, config)
+# In your sub-agent's entry method (called per invocation):
+if _mint_flow_session is not None:
+    session_id, sf_cbs = _mint_flow_session(system_prompt_content)
+else:
+    session_id, sf_cbs = str(uuid.uuid4()), []
+
+config = RunnableConfig(
+    configurable={"thread_id": session_id, "session_id": session_id},
+    callbacks=sf_cbs,
+)
+result = self.graph.invoke(state, config)
+
+# In every node function the graph runs, read session_id from config and
+# pass it to LLMAPI.get_model:
+def agent_node(state, config):
+    session_id = config["configurable"]["session_id"]
+    llm = LLMAPI().get_model(tag=["fast"], session_id=session_id)
+    ...
 ```
+
+`LLMAPI.get_model()` raises `RuntimeError` if called inside a babelfish
+adapter context without an explicit `session_id` — that's the structural
+guarantee that prevents parallel `Send()` fan-out from colliding on the
+babelfish checkpointer.
 
 ### 6. Environment variables
 
@@ -234,7 +257,9 @@ lexus-test will call `list_payloads()` and `list_flow_groups()` automatically.
 | File | What |
 |------|------|
 | `babelfish_adapter/` | Entire adapter package |
-| `PLUGINS/LLM/llmapi.py` | ~15 lines: ContextVar check in get_model() |
-| `AGENTS/agent_siem.py` | ~5 lines: subflow_context() call |
-| `AGENTS/agent_threat_intelligence.py` | ~5 lines: subflow_context() call |
+| `PLUGINS/LLM/llmapi.py` | Explicit `session_id` parameter required under adapter context |
+| `AGENTS/agent_siem.py` | `mint_flow_session()` per invocation, session_id threaded through config |
+| `AGENTS/agent_threat_intelligence.py` | `mint_flow_session()` per invocation, session_id threaded through config |
+| `PLAYBOOKS/CASE/Threat_Hunting_Agent.py` | Every node reads session_id from config; `run_analyst_subgraph` mints per-invocation via `mint_flow_session()` |
+| `PLAYBOOKS/CASE/L3_SOC_Analyst_Agent_With_Tools.py`, `L3_SOC_Analyst_Agent.py` | Nodes accept `config`, read session_id from it |
 | `.gitignore` | Added `**/CONFIG.py` |

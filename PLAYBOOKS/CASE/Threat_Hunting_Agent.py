@@ -1,8 +1,10 @@
 import json
 import operator
+import uuid
 from typing import Annotated, Dict, List
 
 from langchain_core.messages import AnyMessage, ToolMessage, AIMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
@@ -17,6 +19,11 @@ from Lib.baseplaybook import LanggraphPlaybook
 from PLUGINS.LLM.llmapi import LLMAPI
 from PLUGINS.SIRP.sirpapi import Case
 from PLUGINS.SIRP.sirpmodel import PlaybookJobStatus, PlaybookModel, CaseModel
+
+try:
+    from babelfish_adapter.core.context import mint_flow_session as _mint_flow_session
+except ImportError:
+    _mint_flow_session = None
 
 MAX_ITERATIONS = 3
 MAX_ITERATIONS_OF_FUNCTIONS_CALL = 2
@@ -183,8 +190,10 @@ class Playbook(LanggraphPlaybook):
         self.build_main_graph()
 
     def build_analyst_graph(self):
-        def analyst_node(state: AnalystState):
+        def analyst_node(state: AnalystState, config: RunnableConfig):
             self.logger.debug(f"Analyst Node Invoked (Loop: {state.loop_count})")
+
+            session_id = config["configurable"]["session_id"]
 
             system_message = self.load_system_prompt_template("Analyst_System", lang=PROMPT_LANG).format()
             human_message = self.load_human_prompt_template("Analyst_Human", lang=PROMPT_LANG).format(
@@ -206,11 +215,11 @@ class Playbook(LanggraphPlaybook):
 
                 messages.append(HumanMessage(content=stop_instruction))
 
-                base_llm = llm_api.get_model(tag=["powerful"])
+                base_llm = llm_api.get_model(tag=["powerful"], session_id=session_id)
                 response: AIMessage = base_llm.invoke(messages)
             else:
 
-                base_llm = llm_api.get_model(tag=["powerful", "function_calling"])
+                base_llm = llm_api.get_model(tag=["powerful", "function_calling"], session_id=session_id)
                 llm_with_tools = base_llm.bind_tools(tools)
                 response: AIMessage = llm_with_tools.invoke(messages)
 
@@ -229,8 +238,10 @@ class Playbook(LanggraphPlaybook):
         # Tool node
         tool_node = ToolNode(tools)
 
-        def final_answer_node(state: AnalystState):
+        def final_answer_node(state: AnalystState, config: RunnableConfig):
             self.logger.debug("Final Answer Node Invoked")
+
+            session_id = config["configurable"]["session_id"]
 
             # handle tool_calls
             tool_calls = []
@@ -266,7 +277,7 @@ class Playbook(LanggraphPlaybook):
             ]
 
             llm_api = LLMAPI()
-            formatter_llm = llm_api.get_model(tag=["cheap", "structured_output"])
+            formatter_llm = llm_api.get_model(tag=["cheap", "structured_output"], session_id=session_id)
             structured_llm = formatter_llm.with_structured_output(AnalystOutput)
             response: AnalystOutput = structured_llm.invoke(messages)
 
@@ -311,9 +322,11 @@ class Playbook(LanggraphPlaybook):
         self.analyst_graph = builder.compile(name='analyst_graph')
 
     def build_main_graph(self):
-        def intent_node(state: MainState):
+        def intent_node(state: MainState, config: RunnableConfig):
             """Intent recognition: determine the overall goal"""
             self.logger.debug("Intent Node Invoked")
+
+            session_id = config["configurable"]["session_id"]
 
             case: CaseModel = Case.get(rowid=self.param_source_rowid)
 
@@ -338,7 +351,7 @@ class Playbook(LanggraphPlaybook):
             ]
 
             llm_api = LLMAPI()
-            llm = llm_api.get_model(tag="fast")
+            llm = llm_api.get_model(tag="fast", session_id=session_id)
             response: AIMessage = llm.invoke(messages)
 
             for message in messages:
@@ -355,12 +368,14 @@ class Playbook(LanggraphPlaybook):
             }
             return node_out
 
-        def planner_node(state: MainState):
+        def planner_node(state: MainState, config: RunnableConfig):
             """
             Check existing findings to decide what else to look for.
             Generate a batch of tasks at once.
             """
             self.logger.debug("Planner Node Invoked")
+
+            session_id = config["configurable"]["session_id"]
 
             findings = state.findings
             iteration_count = state.iteration_count
@@ -394,7 +409,7 @@ class Playbook(LanggraphPlaybook):
             # Run
             llm_api = LLMAPI()
 
-            llm = llm_api.get_model(tag=["powerful", "structured_output"])
+            llm = llm_api.get_model(tag=["powerful", "structured_output"], session_id=session_id)
 
             messages = [
                 system_message,
@@ -453,9 +468,27 @@ class Playbook(LanggraphPlaybook):
 
         # --- Encapsulate Subgraph call ---
         def run_analyst_subgraph(state: AnalystState):
+            """Every analyst_subgraph invocation mints its own session_id.
+
+            ``continue_to_analysts`` dispatches this node via ``Send`` fan-out —
+            i.e. several invocations run concurrently in the same task. Each
+            invocation is logically a distinct subflow run, so each MUST carry
+            a distinct ``session_id`` (otherwise babelfish's thread_id collides
+            on the checkpointer and raises "Flow paused without an interrupt").
+            """
             self.logger.debug("Running Analyst Subgraph Wrapper")
-            # The output of the graph is dict
-            result: dict = self.analyst_graph.invoke(state)
+
+            if _mint_flow_session is not None:
+                analyst_system_message = self.load_system_prompt_template("Analyst_System", lang=PROMPT_LANG).format().content
+                subflow_session_id, sf_cbs = _mint_flow_session(analyst_system_message)
+            else:
+                subflow_session_id, sf_cbs = str(uuid.uuid4()), []
+
+            subgraph_config = RunnableConfig(
+                configurable={"thread_id": subflow_session_id, "session_id": subflow_session_id},
+                callbacks=sf_cbs,
+            )
+            result: dict = self.analyst_graph.invoke(state, subgraph_config)
             analyst_state = AnalystState(**result)
             finding = Finding(
                 question=analyst_state.question,
@@ -466,9 +499,11 @@ class Playbook(LanggraphPlaybook):
             node_out = {"findings": [finding]}
             return node_out
 
-        def reporter_node(state: MainState):
+        def reporter_node(state: MainState, config: RunnableConfig):
             """Generate final report"""
             self.logger.debug("Reporter Node Invoked")
+
+            session_id = config["configurable"]["session_id"]
             findings = state.findings
             hunting_objective = state.hunting_objective
 
@@ -508,7 +543,7 @@ class Playbook(LanggraphPlaybook):
             ]
 
             llm_api = LLMAPI()
-            llm = llm_api.get_model(tag=["powerful"])
+            llm = llm_api.get_model(tag=["powerful"], session_id=session_id)
             response = llm.invoke(messages)
 
             case_new = CaseModel(rowid=self.param_source_rowid, threat_hunting_report_ai=response.content)

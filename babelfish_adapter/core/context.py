@@ -5,18 +5,22 @@
 # This module is PROJECT-INDEPENDENT. Copy it as-is into any project that
 # integrates with lexus-test via the babelfish proxy.
 #
-# It provides:
-#   1. A ContextVar that carries babelfish session state (mode, session_id, etc.)
-#   2. Helper functions for subflow tracing (Langfuse callbacks, session isolation)
-#   3. A context manager (subflow_context) that sub-agents use to get proper
-#      tracing with minimal boilerplate
+# ─── Design: explicit session_id, no inheritance ────────────────────────────
 #
-# HOW IT WORKS:
-#   - The adapter's run() sets babelfish_context before executing the flow
-#   - The project's LLM factory reads babelfish_context to decide whether to
-#     route LLM calls through babelfish (proxy) or directly to the provider
-#   - Sub-agents use subflow_context() to get their own Langfuse trace and
-#     session_id, enabling per-subflow trace separation
+# Every flow role (parent flow, every subflow) is responsible for minting its
+# own fresh UUID4 ``session_id`` and passing it explicitly to the LLM factory
+# (``LLMAPI.get_model(..., session_id=...)``).  There is NO implicit default,
+# no ContextVar-based inheritance, and no parent-session override dance.  This
+# makes the "forgot to wrap a concurrent Send fan-out" bug structurally
+# impossible — every LLM call site must declare which session it belongs to,
+# or the call refuses to build.
+#
+# ``babelfish_context`` still exists, but it only carries cross-cutting state
+# that's invariant across all calls inside one adapter.run() invocation:
+#   - mode           ("babelfish" | "baseline")
+#   - flow_id        (X-Flow-ID header)
+#   - subflow_server_ids  (which system messages belong to tracked subflows)
+#   - subflow_invocations (accumulator for __trace_metadata__)
 #
 # CRITICAL — LLM CLIENT CACHING PITFALL:
 #   The LLM factory bakes X-Session-ID and other headers into the ChatOpenAI
@@ -28,7 +32,7 @@
 
 import contextvars
 import os
-from contextlib import contextmanager
+import uuid as _uuid
 from typing import Optional, TypedDict
 
 
@@ -36,10 +40,7 @@ from typing import Optional, TypedDict
 
 class BabelfishContextData(TypedDict):
     mode: str                  # "baseline" | "babelfish"
-    session_id: str            # UUID4 — used as X-Session-ID header (overridden per subflow invocation)
-    trace_id: str              # client trace ID for Langfuse (main flow)
     flow_id: str               # X-Flow-ID header for babelfish routing
-    callbacks: list            # Langfuse CallbackHandler instances for the main flow
     subflow_server_ids: dict   # system_message_content → msg_hash (identifies tracked subflows)
     subflow_invocations: list  # accumulator: list[{msg_hash, client_trace_id, server_session_id}]
 
@@ -50,11 +51,11 @@ babelfish_context: contextvars.ContextVar[Optional[BabelfishContextData]] = cont
 
 
 # ── Subflow Helpers ───────────────────────────────────────────────────────────
-# These functions are used by subflow_context() below. The subflow_server_ids
-# dict (system_message_content → msg_hash) is populated by lexus-test and
-# passed through the adapter's run(); it identifies which system messages
-# correspond to tracked subflows. Fresh IDs are generated per invocation so
-# parallel calls (e.g. LangGraph Send fan-out) produce distinct traces.
+# Subflow identification is still ContextVar-based because ``subflow_server_ids``
+# is cross-cutting (the same map applies to every LLM call inside one
+# adapter.run()).  Session identity is NOT in the ContextVar — the helper
+# below mints fresh UUIDs at every invocation and returns them to the caller,
+# who passes them explicitly to ``LLMAPI.get_model()``.
 
 def _is_tracked_subflow(system_message_content: str) -> str | None:
     """Return the msg_hash if this system message is a tracked subflow, else None."""
@@ -92,61 +93,46 @@ def flush_callbacks(callbacks: list) -> None:
                 pass
 
 
-# ── Subflow Context Manager ──────────────────────────────────────────────────
-# Use this in sub-agents to set up tracing + session isolation in one call.
-#
-# Usage in a sub-agent:
-#   with subflow_context(system_prompt_content) as callbacks:
-#       config = RunnableConfig(configurable={"thread_id": tid}, callbacks=callbacks)
-#       result = self.graph.invoke(state, config)
+def mint_flow_session(system_message_content: str) -> tuple[str, list]:
+    """Mint a fresh ``session_id`` for one flow role invocation.
 
-@contextmanager
-def subflow_context(system_message_content: str):
-    """Context manager for sub-agent babelfish integration.
+    Called once per flow entry point: top-level ``adapter.run()`` mints one
+    for the parent flow, and every sub-agent / node function mints its own
+    when it starts making LLM calls.  The returned ``session_id`` is a fresh
+    UUID4 that the caller MUST pass to every ``LLMAPI.get_model`` call within
+    its scope — there is no ContextVar fallback.
 
-    On every entry, generates fresh per-invocation IDs:
-      - client_trace_id (uuid4) for a new Langfuse client trace
-      - server_session_id (uuid4) sent as X-Session-ID so holy-grail creates
-        a distinct server trace
+    If the given system_message_content is registered as a tracked subflow in
+    ``babelfish_context["subflow_server_ids"]``, the call is recorded in
+    ``subflow_invocations`` (for ``__trace_metadata__``) and Langfuse callbacks
+    scoped to this invocation are returned.  Otherwise the call is considered
+    parent-flow work — no tracked row is recorded, and the returned callbacks
+    list is empty (the parent's own callbacks come from ``adapter.run()``).
 
-    The invocation is recorded in ``ctx["subflow_invocations"]`` so the
-    adapter can return the full list to lexus-test (which polls each trace
-    and creates one run record per invocation).
-
-    This is safe for parallel fan-out (LangGraph Send) because:
-      - ContextVars are copied per asyncio task, so each task's session_id
-        override is isolated
-      - list.append() is atomic under the GIL
+    Returns:
+        (session_id, callbacks) — the caller passes ``session_id`` to every
+        ``LLMAPI.get_model`` call in its scope, and threads ``callbacks``
+        into the RunnableConfig for graph invocations so Langfuse traces land
+        on the right client trace id.
     """
-    import uuid as _uuid
+    session_id = str(_uuid.uuid4())
 
     parent_ctx = babelfish_context.get()
     if not parent_ctx:
-        yield []
-        return
+        # Running outside the adapter (tests, CLI). Caller still gets a
+        # session_id so the LLM call site has one to pass.
+        return session_id, []
 
     msg_hash = _is_tracked_subflow(system_message_content)
     if not msg_hash:
-        # Not a tracked subflow — no callbacks, no session override.
-        yield []
-        return
+        # Parent flow work — the adapter's own callbacks already trace this.
+        return session_id, []
 
     client_trace_id = str(_uuid.uuid4()).replace("-", "")
-    server_session_id = str(_uuid.uuid4())
-
     parent_ctx["subflow_invocations"].append({
         "msg_hash": msg_hash,
         "client_trace_id": client_trace_id,
-        "server_session_id": server_session_id,
+        "server_session_id": session_id,
     })
-
     callbacks = _build_subflow_callback(client_trace_id)
-    token = babelfish_context.set({**parent_ctx, "session_id": server_session_id})
-    try:
-        yield callbacks
-    finally:
-        try:
-            babelfish_context.reset(token)
-        except ValueError:
-            pass
-        flush_callbacks(callbacks)
+    return session_id, callbacks

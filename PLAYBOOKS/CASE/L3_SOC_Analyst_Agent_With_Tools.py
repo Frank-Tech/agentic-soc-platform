@@ -106,12 +106,14 @@ class Playbook(LanggraphPlaybook):
             content = f"Current Case Data (includes latest alert): {case.model_dump_json_for_ai()}"
             return {"case": case, "messages": [HumanMessage(content=content)]}
 
-        def analyze_node(state: AgentState):
+        def analyze_node(state: AgentState, config):
+            session_id = config["configurable"]["session_id"]
+
             system_prompt_template = self.load_system_prompt_template("L3_SOC_Analyst")
             system_message = system_prompt_template.format()
 
             llm_api = LLMAPI()
-            llm = llm_api.get_model(tag=["structured_output", "function_calling"])
+            llm = llm_api.get_model(tag=["structured_output", "function_calling"], session_id=session_id)
             llm_with_tools = llm.bind_tools([*tools, AnalyzeResult])
 
             messages = [system_message] + state.messages

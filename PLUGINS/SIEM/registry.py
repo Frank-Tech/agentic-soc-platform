@@ -62,6 +62,8 @@ def get_default_agg_fields(index_name: str) -> List[str]:
 
 def get_backend_type(index_name: str) -> str:
     registry = _load_yaml_configs()
-    if index_name in registry:
-        return registry[index_name].backend
-    return "ELK"
+    if index_name not in registry:
+        raise ValueError(
+            f"Unknown SIEM index '{index_name}'. Valid indices: {sorted(registry.keys())}"
+        )
+    return registry[index_name].backend
