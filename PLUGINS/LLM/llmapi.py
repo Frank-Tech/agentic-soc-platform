@@ -123,7 +123,34 @@ class LLMAPI(object):
                     "to prevent X-Session-ID collisions between concurrent "
                     "invocations. See babelfish_adapter/core/context.py."
                 )
-            params["model"] = os.environ.get("ASP_ADAPTER_MODEL", "gpt-4o")
+            # ─────────────────────────────────────────────────────────────
+            # A-design model precedence (lexus-test integration).
+            #
+            # BEFORE (bug):
+            #   params["model"] = os.environ.get("ASP_ADAPTER_MODEL", "gpt-4o")
+            #
+            # That re-read an env var at call time. ``bootstrap.py`` also
+            # read the same env var — but at IMPORT time, freezing it into
+            # ``LLM_CONFIGS``. When the two readers saw different
+            # environments (e.g. one baseline task without the context
+            # variable set, one babelfish task with it), the same process
+            # resolved two different model names. That's exactly what
+            # happened in suite_run 325: baseline ran on gpt-4o-2024-08-06
+            # and nexus ran on gpt-4o, and gpt-4o's json_schema output
+            # drift caused the analyst subgraph to never trigger.
+            #
+            # NOW (fix):
+            #   1. If lexus-test pinned a model via
+            #      ``babelfish_context["model_override"]`` — use it.
+            #   2. Otherwise fall back to ``selected_config.get("model")``,
+            #      which is what ``LLM_CONFIGS`` resolved at bootstrap time
+            #      (the adapter's pre-existing source). Standalone adapter
+            #      usage (no context override) keeps working unchanged.
+            # Both branches now read from a single source per invocation,
+            # so baseline and babelfish in the same process always agree.
+            # ─────────────────────────────────────────────────────────────
+            model_override = ctx.get("model_override")
+            params["model"] = model_override or selected_config.get("model")
             params["api_key"] = os.environ["OPENAI_API_KEY"]
             params["http_client"] = None
             if ctx.get("mode") == "babelfish":

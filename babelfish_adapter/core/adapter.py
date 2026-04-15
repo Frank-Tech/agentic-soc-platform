@@ -58,6 +58,7 @@ async def run(
     flow_id: str,
     payload_name: str,
     subflow_server_ids: dict | None = None,
+    model: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Execute a flow and yield LangGraph-style steps.             KEEP AS-IS
 
@@ -77,6 +78,15 @@ async def run(
 
     lexus-test no longer pre-mints a session_id and passes it in; the adapter
     owns minting and reports every session back via ``__trace_metadata__``.
+
+    ``model`` kwarg (A-design, added for lexus-test integration):
+        Optional OpenAI model name to pin for this invocation (e.g.
+        ``"gpt-4o-2024-08-06"``). Lexus-test passes this from its own
+        settings so baseline and babelfish runs always resolve to the same
+        snapshot. When ``None`` (the standalone case), ``LLMAPI.get_model``
+        falls back to ``LLM_CONFIGS`` — the adapter's pre-existing model
+        source — so callers that don't pass ``model`` continue to work
+        unchanged.
     """
     if mode not in ("baseline", "babelfish"):
         raise ValueError(f"Invalid mode: {mode}. Expected 'baseline' or 'babelfish'.")
@@ -94,6 +104,11 @@ async def run(
             "flow_id": flow_id,
             "subflow_server_ids": subflow_server_ids or {},
             "subflow_invocations": subflow_invocations,
+            # A-design: lexus-test passes the model to pin via this context
+            # key. LLMAPI.get_model reads it and overrides LLM_CONFIGS so
+            # both baseline and babelfish modes use the same pinned snapshot
+            # for the whole invocation.
+            "model_override": model,
         }
     )
 
