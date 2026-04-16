@@ -322,8 +322,19 @@ _SEVERITY_TO_PRIORITY = {
 
 
 def _build_case_from_alert(alert: AlertModel) -> CaseModel:
+    from datetime import datetime, timezone
     rowid = str(uuid.uuid4())
     category = alert.product_category if alert.product_category is not None else ProductCategory.OTHERS
+    # ctime (case creation time) is set to now() so the analyst's system
+    # prompt instruction "参考案件背景中的原始警报时间范围" (refer to the
+    # original alert time range in the Case Background) has a concrete
+    # timestamp to anchor on. Without this, ctime=None appears in the
+    # serialized case context, and gpt-4o-2024-08-06 sometimes interprets
+    # that as "no time info available" and passes time_range_start=None to
+    # siem_search_by_natural_language, which Pydantic rejects. The issue
+    # is amplified on Chinese-language natural_query values where the model
+    # drops sibling JSON fields under structured-output drift.
+    now = datetime.now(timezone.utc).isoformat()
     return CaseModel(
         rowid=rowid,
         title=f"Case: {alert.title}",
@@ -335,6 +346,7 @@ def _build_case_from_alert(alert: AlertModel) -> CaseModel:
         category=category,
         tags=list(alert.labels) if alert.labels else [],
         status=CaseStatus.IN_PROGRESS,
+        ctime=now,
         comment="Case synthesized from alert for babelfish testing.",
         correlation_uid=alert.correlation_uid,
         summary="",

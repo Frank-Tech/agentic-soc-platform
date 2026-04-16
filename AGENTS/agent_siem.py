@@ -46,8 +46,15 @@ class AgentSIEM:
     @staticmethod
     def siem_search_by_natural_language(
             natural_query: Annotated[str, "A natural language query for SIEM. (e.g., 'Find connections from 10.10.10.10 to any IP')"],
-            time_range_start: Annotated[str, "UTC start time in ISO8601 format: YYYY-MM-DDTHH:MM:SSZ. Provide together with time_range_end."] = None,
-            time_range_end: Annotated[str, "UTC end time in ISO8601 format: YYYY-MM-DDTHH:MM:SSZ. Provide together with time_range_start."] = None,
+            # Changed from Annotated[str, ...] to Annotated[str | None, ...]:
+            # gpt-4o-2024-08-06 drops these fields (passes null) when the
+            # sibling natural_query value contains Chinese characters —
+            # a known structured-output drift on CJK content. The function
+            # body already handles None (line 57: ``if time_range_start and
+            # time_range_end``), so accepting None in the schema makes the
+            # tool resilient to LLM whimsy without changing behavior.
+            time_range_start: Annotated[str | None, "UTC start time in ISO8601 format: YYYY-MM-DDTHH:MM:SSZ. Provide together with time_range_end."] = None,
+            time_range_end: Annotated[str | None, "UTC end time in ISO8601 format: YYYY-MM-DDTHH:MM:SSZ. Provide together with time_range_start."] = None,
     ) -> Annotated[str, "A summary of the findings from the SIEM search."]:
         """
         Searches SIEM logs by a natural language query. Must use precise time periods and precise filter conditions to avoid SIEM returning a large number of logs.
