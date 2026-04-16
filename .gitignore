@@ -182,12 +182,10 @@ Docker/Huggingface/bm25/*
 
 
 Docker/mcp_uuid
-Docker/db_chroma/*
 PLAYBOOKS/Debug_*
 DATA/Debug_*/
-PLUGINS/Embeddings/db/*
 
-.claude/*
+.claude/*.local.*
 .vscode/*
 
 # Plugin configs are developer-local (copy from CONFIG.example.py)

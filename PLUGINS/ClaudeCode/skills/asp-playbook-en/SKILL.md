@@ -1,6 +1,6 @@
 ---
 name: asp-playbook-en
-description: 'Operate ASP playbook definitions and playbook run records. Use when users ask which playbooks can run, want to execute a playbook on a case, alert, or artifact, or want to inspect existing playbook runs.'
+description: 'Operate ASP playbook definitions and playbook run records. Use when users want to list runnable definitions, execute playbooks, or inspect run history.'
 argument-hint: 'list playbook definitions | run playbook <name> for <target_type> <target_id> | list playbook runs [filters]'
 compatibility: connect to asp mcp server
 metadata:
@@ -14,34 +14,31 @@ metadata:
 
 # ASP Playbook
 
-Use this skill for playbook automation work on ASP.
+Use this skill when the user needs to work with playbook automation on ASP.
 
 ## When to Use
 
 - The user wants to know which playbook definitions are currently available to run.
-- The user wants to execute a playbook against a case, alert, or artifact.
+- The user wants to run a playbook against a case, alert, or artifact.
 - The user wants to inspect playbook run records by target object, type, or job status.
-- The user wants to check whether automation has already run for a target object.
+- The user wants to confirm whether a target object has already been automated.
 
 ## Operating Rules
 
-- Keep playbook definitions and playbook run records strictly separated in language and workflow.
+- Keep playbook definitions and playbook run records strictly separate in language and workflow.
 - Use `list_available_playbook_definitions` only for runnable definitions.
 - Use `list_playbook_runs` only for run records.
 - Use `execute_playbook` only when the user has named a runnable definition and identified the target object.
-- Do not invent a playbook definition name. If missing, list or suggest from available definitions first.
-- Treat `user_input` as optional, per-run natural-language guidance for the selected playbook, not as a generic chat
-  prompt.
+- Do not invent a playbook definition name. If it is missing, list or suggest available definitions first.
+- Treat `user_input` as optional natural-language guidance for that specific run, not as a generic chat prompt.
 
 ## Decision Flow
 
-1. If the user asks what can run, call `list_available_playbook_definitions`.
-2. If the user asks whether automation has run for a case, alert, or artifact, call
-   `list_playbook_runs(source_id=<target_id>, type=[<target_type>])`.
-3. If the user asks to run automation and already provides definition name plus target object, call `execute_playbook`.
-4. If the user asks to run automation but does not know the playbook definition name, call
-   `list_available_playbook_definitions` first.
-5. If the user asks for general automation history, call `list_playbook_runs` with the narrowest useful filters.
+1. If the user wants to know what can run, call `list_available_playbook_definitions`.
+2. If the user wants to confirm whether automation has run for a case, alert, or artifact, call `list_playbook_runs(source_id=<target_id>, type=[<target_type>])`.
+3. If the user wants to run automation and already provides the definition name plus target object, call `execute_playbook`.
+4. If the user wants to run automation but does not know the definition name, call `list_available_playbook_definitions` first.
+5. If the user wants the overall automation history, call `list_playbook_runs` with the narrowest useful filters.
 
 ## SOP
 
@@ -49,17 +46,12 @@ Use this skill for playbook automation work on ASP.
 
 1. Call `list_available_playbook_definitions`.
 2. Parse the returned JSON.
-3. Present only the most relevant definitions for the user's target object or goal.
+3. Show only the definitions that are most relevant to the user's target object or goal.
 4. Make it explicit that these are definitions, not run records.
 
-Preferred response structure:
+### Run a Playbook
 
-| Definition Name | Likely Target | Purpose |
-|-----------------|---------------|---------|
-
-### Run A Playbook
-
-1. Require `target_type`, `target_id`, and playbook definition `name`.
+1. Require `target_type`, `target_id`, and the playbook definition `name`.
 2. If the definition name is missing or uncertain, call `list_available_playbook_definitions` first.
 3. Pass `user_input` only when the user wants extra guidance for that run.
 4. Call `execute_playbook(type=<target_type>, record_id=<target_id>, name=<definition_name>, user_input=<optional>)`.
@@ -75,7 +67,7 @@ Preferred response structure:
 
 ### Review Playbook Runs
 
-1. Extract supported filters: `playbook_id`, `job_status`, `type`, `source_id`, `limit`.
+1. Extract supported filters: `playbook_id`, `job_status`, `type`, `source_id`, and `limit`.
 2. Use `source_id` when the user is asking from the perspective of one case, alert, or artifact.
 3. Call `list_playbook_runs`.
 4. Parse the returned JSON strings.
@@ -90,18 +82,17 @@ Then add one short interpretation line when useful.
 
 ## Clarification Rules
 
-- Ask for `target_type` and `target_id` only when missing for run requests.
-- Ask for the playbook definition name only when missing or ambiguous.
+- Ask for `target_type` and `target_id` only when they are missing for run requests.
+- Ask for the playbook definition name only when it is missing or ambiguous.
 - If the user names something that sounds like a run ID instead of a definition, clarify before executing.
-- If the user asks to "check the run" without a run ID, prefer `list_playbook_runs` with object context instead of
-  guessing a specific run.
+- If the user asks to "check the run" without a run ID, prefer `list_playbook_runs` with object context instead of guessing a specific run.
 
 ## Output Rules
 
 - Be concise.
 - Do not blur the words definition, run, record, and target object.
 - Do not dump all playbook definitions if only a shortlist is relevant.
-- Prefer operational wording: what can run, what ran, what is pending, what should be checked next.
+- Prefer operational wording: what can run, what ran, what is pending, and what should be checked next.
 
 ## Failure Handling
 

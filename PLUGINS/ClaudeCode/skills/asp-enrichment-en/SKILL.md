@@ -1,6 +1,6 @@
 ---
 name: asp-enrichment-en
-description: 'Save structured analysis results as enrichment and attach them to a case, alert, or artifact.'
+description: 'Save structured data as enrichment and attach it to a case, alert, or artifact.'
 argument-hint: 'create enrichment for <case|alert|artifact> <target_id> | attach enrichment to <case|alert|artifact> <target_id>'
 compatibility: connect to asp mcp server
 metadata:
@@ -14,75 +14,73 @@ metadata:
 
 # ASP Enrichment
 
-Use this skill when analysis results should be saved back into ASP as structured context.
+Use this skill when analysis results need to be saved back into ASP as structured context and attached to the corresponding case, alert, or artifact.
 
 ## When to Use
 
-- The user wants to save structured analysis, intel, or investigation notes.
+- The user wants to save structured analysis, intelligence, or investigation conclusions.
 - The user wants to attach context to a case, alert, or artifact.
 - The user wants to persist SIEM findings, threat intel, asset context, or analyst conclusions.
-- The user wants to reuse an existing enrichment and attach it to a target object.
+- The user already has an enrichment and wants to reuse it on a target object.
 
 ## Operating Rules
 
 - Treat enrichment as the platform's structured result layer, not as a generic comment field.
-- Use this skill when the goal is to persist analysis on a `case`, `alert`, or `artifact`.
+- When the goal is to persist analysis on a `case`, `alert`, or `artifact`, use this skill.
 - Separate creation from attachment.
 - Use `create_enrichment` for a new result record.
-- Use `attach_enrichment_to_target` only after you have the enrichment row ID.
-- Keep the payload compact and operational.
-- Prefer object-local skills for reviewing the object itself, and this skill for saving the result.
+- Use `attach_enrichment_to_target` only after you have the enrichment rowid.
+- Keep the payload compact and actionable.
+- Use the object-specific skill first when the user is still inspecting the object, and use this skill when saving the result.
+
+## Additional Information
+
+- `rowid` is the UUID for each enrichment record and is used for data association.
+- `enrichment_id` is the human-readable unique ID for each enrichment record.
 
 ## Decision Flow
 
 1. If the user wants to save a new structured result, call `create_enrichment` first.
-2. If the user wants to attach that result to a case, alert, or artifact, call `attach_enrichment_to_target`.
-3. If the user already has an existing enrichment row ID, skip creation and attach it directly.
+2. If the user wants to attach the result to a case, alert, or artifact, call `attach_enrichment_to_target`.
+3. If the user already has an enrichment rowid, skip creation and attach it directly.
 4. If the user is still exploring the object rather than saving a result, use the corresponding object skill first.
 
 ## SOP
 
 ### Create And Attach New Enrichment
 
-1. Require `target_type` and `target_id`.
+1. Require `target_id` such as `case_000001`, `alert_000001`, or `artifact_000001`.
 2. Convert the user's analysis into a compact structured enrichment payload.
-3. Call `create_enrichment` and keep the returned enrichment row ID.
-4. Call
-   `attach_enrichment_to_target(target_type=<target_type>, target_id=<target_id>, enrichment_rowid=<created_rowid>)`.
-5. Confirm that the enrichment was created and attached.
+3. Call `create_enrichment` and keep the returned enrichment rowid.
+4. Call `attach_enrichment_to_target(target_id=<target_id>, enrichment_rowid=<created_rowid>)`.
+5. Confirm that the enrichment was created and attached successfully.
 
 Preferred response structure:
 
-- `Target`: target type and target ID
-- `Enrichment`: created enrichment row ID
-- `Attachment`: attached to target
-- `Next useful step`: optional, usually continue investigation, review the enriched object, or run follow-up automation
+- `Target ID`: target ID
+- `Enrichment`: created enrichment rowid
 
 ### Attach Existing Enrichment
 
-1. Require `target_type`, `target_id`, and `enrichment_rowid`.
-2. Call
-   `attach_enrichment_to_target(target_type=<target_type>, target_id=<target_id>, enrichment_rowid=<enrichment_rowid>)`.
-3. Confirm that the enrichment was attached.
+1. Require `target_id` and `enrichment_rowid`.
+2. Call `attach_enrichment_to_target(target_id=<target_id>, enrichment_rowid=<enrichment_rowid>)`.
+3. Confirm that the enrichment was attached successfully.
 
 ## Clarification Rules
 
-- Ask for `target_type` and `target_id` only when missing.
-- Ask for the enrichment row ID only when the user wants to reuse an existing enrichment and did not provide it.
-- If the user only says "save this result", infer the most obvious target object from the current request when it is
-  clear.
-- If the user wants a note rather than a structured result, still prefer enrichment when the content is investigative
-  context.
+- Ask for `target_id` only when it is missing.
+- Ask for the enrichment rowid only when the user wants to reuse an existing enrichment and did not provide it.
+- If the user only says "save this result", infer the most obvious target object from the current request when it is clear, and prefer Case.
 
 ## Output Rules
 
 - Be concise.
-- Do not dump raw JSON unless the user explicitly asks for it.
+- Do not output raw JSON unless the user explicitly asks for it.
 - Prefer analyst-facing wording over storage wording.
-- Emphasize what was saved, where it was attached, and why it is useful.
+- Clearly state what was saved, where it was attached, and why it is useful.
 
 ## Failure Handling
 
-- If the target object is missing, say so directly.
+- If the target object does not exist, say so directly.
 - If the enrichment payload is incomplete, ask one focused follow-up instead of guessing.
-- If attachment fails because the enrichment row ID is missing, ask for it or create a new enrichment first.
+- If attachment fails because the enrichment rowid is missing, ask for it or create a new enrichment first.

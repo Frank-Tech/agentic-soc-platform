@@ -439,7 +439,6 @@ def update_knowledge(
         title=title,
         body=body,
         action=action,
-        source=source,
         tags=tags
     )
 

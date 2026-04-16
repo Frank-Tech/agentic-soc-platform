@@ -15,7 +15,7 @@ metadata:
 # ASP Artifact
 
 当用户要围绕 artifact 进行调查分析时，使用这个 skill。
-artifact 是 ASP 中的三级数据,每个 artifact 都挂载在一个 alert 下,是最小的需要调查的数据单元。
+artifact 由系统自动创建，用户只能查询和分析已有 artifact，并通过 enrichment 保存分析结果。
 
 ## 适用场景
 
@@ -46,7 +46,7 @@ artifact 是 ASP 中的三级数据,每个 artifact 都挂载在一个 alert 下
 1. 从请求中提取最窄且最有用的过滤条件。
 2. 调用 `list_artifacts`。
 3. 解析返回的 JSON 字符串。
-4. 以紧凑的 artifact 视图呈现；如果用户大概率下一步要附加或复用该 artifact，则显式展示 artifact row ID。
+4. 以紧凑的 artifact 视图呈现；如果用户大概率下一步要附加或复用该 artifact，则显式展示 artifact rowid。
 
 首选回复结构：
 
