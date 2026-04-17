@@ -35,6 +35,22 @@ import os
 import uuid as _uuid
 from typing import Optional, TypedDict
 
+from langchain_core.callbacks import BaseCallbackHandler
+
+
+class _CallbackIsolationHandler(BaseCallbackHandler):
+    """No-op handler that prevents LangChain parent-callback inheritance.
+
+    LangChain's ``CallbackManager.configure()`` treats ``callbacks=[]``
+    (empty list) as falsy and falls through to the parent graph's ambient
+    callback context — so any Langfuse handler from the parent leaks into
+    the child graph and records duplicate observations on the wrong trace.
+
+    Passing a non-empty list (even with a no-op handler) forces LangChain
+    to create a fresh ``CallbackManager`` with only our handlers, blocking
+    inheritance from the parent.
+    """
+
 
 # ── ContextVar Definition ─────────────────────────────────────────────────────
 
@@ -121,12 +137,14 @@ def mint_flow_session(system_message_content: str) -> tuple[str, list]:
     if not parent_ctx:
         # Running outside the adapter (tests, CLI). Caller still gets a
         # session_id so the LLM call site has one to pass.
-        return session_id, []
+        # Return isolation handler to prevent parent-callback leakage.
+        return session_id, [_CallbackIsolationHandler()]
 
     msg_hash = _is_tracked_subflow(system_message_content)
     if not msg_hash:
         # Parent flow work — the adapter's own callbacks already trace this.
-        return session_id, []
+        # Return isolation handler to prevent parent-callback leakage.
+        return session_id, [_CallbackIsolationHandler()]
 
     client_trace_id = str(_uuid.uuid4()).replace("-", "")
     parent_ctx["subflow_invocations"].append({

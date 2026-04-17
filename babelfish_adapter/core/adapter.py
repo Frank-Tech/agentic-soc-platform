@@ -293,6 +293,10 @@ _FLOW_GROUPS = [
         "subflows": [
             {"name": "agent_siem", "prompt_dir": "Agent_SIEM"},
             {"name": "agent_threat_intelligence", "prompt_dir": "Agent_Threat_Intelligence"},
+            {"name": "planner", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Planner_System.md"},
+            {"name": "analyst", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Analyst_System.md"},
+            {"name": "analyst_final", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Analyst_Final_System.md"},
+            {"name": "report", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Report_System.md"},
         ],
     },
 ]
@@ -456,7 +460,7 @@ def list_flow_groups() -> List[Dict]:
             "subflows": [
                 {
                     "name": sf["name"],
-                    "system_message": _read_prompt(sf["prompt_dir"]),
+                    "system_message": _read_prompt(sf["prompt_dir"], sf.get("prompt_file", "system_prompt.md")),
                 }
                 for sf in group["subflows"]
             ],
