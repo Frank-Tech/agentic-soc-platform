@@ -276,6 +276,28 @@ def _get_alert_by_name(alert_name: str):
 
 # ── FLOW GROUPS ──────────────────────────────────────────────────────────────
 # Flow/subflow relationships for trace mapping.
+#
+# WHICH ROLES TO DECLARE AS SUBFLOWS:
+#
+# Only declare a role as a subflow if it satisfies BOTH conditions:
+#   1. It mints its own session_id via mint_flow_session() — otherwise its
+#      LLM calls share the parent's trace and lexus can't track it separately.
+#   2. It has tools (check babel_fish_agentic_flows.tools in the DB) — roles
+#      with tools=[] are pure prompt-in/text-out calls that babelfish can't
+#      optimize, so there's nothing to track.
+#
+# Roles that DON'T meet both conditions are internal graph nodes. Holy-grail
+# still creates AF rows for them (different system_message_hash), but they
+# must NOT be listed here — lexus would create flow_runs that never get pairs.
+#
+# threat_hunting graph roles:
+#   intent   (Intent_System.md)        — parent flow, no tools    → parent
+#   planner  (Planner_System.md)       — parent session, no tools → SKIP
+#   analyst  (Analyst_System.md)       — own session, HAS tools   → subflow ✓
+#   analyst_final (Analyst_Final_System.md) — analyst session, no tools → SKIP
+#   report   (Report_System.md)        — parent session, no tools → SKIP
+#   agent_siem                         — own session, HAS tools   → subflow ✓
+#   agent_threat_intelligence          — own session, HAS tools   → subflow ✓
 
 from Lib.configs import DATA_DIR
 
@@ -293,10 +315,7 @@ _FLOW_GROUPS = [
         "subflows": [
             {"name": "agent_siem", "prompt_dir": "Agent_SIEM"},
             {"name": "agent_threat_intelligence", "prompt_dir": "Agent_Threat_Intelligence"},
-            {"name": "planner", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Planner_System.md"},
             {"name": "analyst", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Analyst_System.md"},
-            {"name": "analyst_final", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Analyst_Final_System.md"},
-            {"name": "report", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Report_System.md"},
         ],
     },
 ]
