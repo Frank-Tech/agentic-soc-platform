@@ -279,25 +279,26 @@ def _get_alert_by_name(alert_name: str):
 #
 # WHICH ROLES TO DECLARE AS SUBFLOWS:
 #
-# Only declare a role as a subflow if it satisfies BOTH conditions:
-#   1. It mints its own session_id via mint_flow_session() — otherwise its
-#      LLM calls share the parent's trace and lexus can't track it separately.
-#   2. It has tools (check babel_fish_agentic_flows.tools in the DB) — roles
-#      with tools=[] are pure prompt-in/text-out calls that babelfish can't
-#      optimize, so there's nothing to track.
+# Declare every role that mints its own session_id via mint_flow_session().
+# Without registration, the minted session falls into mint_flow_session()'s
+# "parent work" branch — no subflow_invocation recorded — and the test harness
+# can't locate a trace it was told to poll for. This applies even to tool-less
+# orchestrators (e.g. a node whose only job is to dispatch a plan): their AF
+# row auto-completes as ``complete_no_tools`` but still needs a subflow entry
+# so lexus can pair the client/server traces.
 #
-# Roles that DON'T meet both conditions are internal graph nodes. Holy-grail
-# still creates AF rows for them (different system_message_hash), but they
-# must NOT be listed here — lexus would create flow_runs that never get pairs.
+# Roles that reuse another role's session (e.g. analyst_final, which runs
+# inside the analyst subgraph and shares its session) MUST NOT be registered.
+# They don't mint a new trace, so a subflow row for them would never pair.
 #
 # threat_hunting graph roles:
-#   intent   (Intent_System.md)        — parent flow, no tools    → parent
-#   planner  (Planner_System.md)       — parent session, no tools → SKIP
-#   analyst  (Analyst_System.md)       — own session, HAS tools   → subflow ✓
-#   analyst_final (Analyst_Final_System.md) — analyst session, no tools → SKIP
-#   report   (Report_System.md)        — parent session, no tools → SKIP
-#   agent_siem                         — own session, HAS tools   → subflow ✓
-#   agent_threat_intelligence          — own session, HAS tools   → subflow ✓
+#   intent   (Intent_System.md)             — mints own session → subflow ✓
+#   planner  (Planner_System.md)            — mints own session → subflow ✓
+#   analyst  (Analyst_System.md)            — mints own session → subflow ✓
+#   analyst_final (Analyst_Final_System.md) — analyst session   → SKIP
+#   report   (Report_System.md)             — mints own session → subflow ✓
+#   agent_siem                              — mints own session → subflow ✓
+#   agent_threat_intelligence               — mints own session → subflow ✓
 
 from Lib.configs import DATA_DIR
 
@@ -315,7 +316,10 @@ _FLOW_GROUPS = [
         "subflows": [
             {"name": "agent_siem", "prompt_dir": "Agent_SIEM"},
             {"name": "agent_threat_intelligence", "prompt_dir": "Agent_Threat_Intelligence"},
+            {"name": "intent", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Intent_System.md"},
+            {"name": "planner", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Planner_System.md"},
             {"name": "analyst", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Analyst_System.md"},
+            {"name": "report", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Report_System.md"},
         ],
     },
 ]
