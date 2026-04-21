@@ -326,8 +326,6 @@ class Playbook(LanggraphPlaybook):
             """Intent recognition: determine the overall goal"""
             self.logger.debug("Intent Node Invoked")
 
-            session_id = config["configurable"]["session_id"]
-
             case: CaseModel = Case.get(rowid=self.param_source_rowid)
 
             user_intent = self.param_user_input
@@ -337,6 +335,11 @@ class Playbook(LanggraphPlaybook):
 
             system_prompt_template = self.load_system_prompt_template("Intent_System", lang=PROMPT_LANG)
             system_message = system_prompt_template.format()
+
+            if _mint_flow_session is not None:
+                session_id, _ = _mint_flow_session(system_message.content)
+            else:
+                session_id = str(uuid.uuid4())
 
             human_message = self.load_human_prompt_template("Intent_Human", lang=PROMPT_LANG).format(case=case.model_dump_json_for_ai(),
                                                                                                      user_intent=user_intent)
@@ -375,8 +378,6 @@ class Playbook(LanggraphPlaybook):
             """
             self.logger.debug("Planner Node Invoked")
 
-            session_id = config["configurable"]["session_id"]
-
             findings = state.findings
             iteration_count = state.iteration_count
             hunting_objective = state.hunting_objective
@@ -391,6 +392,11 @@ class Playbook(LanggraphPlaybook):
             system_prompt_template = self.load_system_prompt_template("Planner_System", lang=PROMPT_LANG)
 
             system_message = system_prompt_template.format()
+
+            if _mint_flow_session is not None:
+                session_id, _ = _mint_flow_session(system_message.content)
+            else:
+                session_id = str(uuid.uuid4())
 
             history_md_list = []
             for record in findings:
@@ -503,7 +509,6 @@ class Playbook(LanggraphPlaybook):
             """Generate final report"""
             self.logger.debug("Reporter Node Invoked")
 
-            session_id = config["configurable"]["session_id"]
             findings = state.findings
             hunting_objective = state.hunting_objective
 
@@ -527,6 +532,11 @@ class Playbook(LanggraphPlaybook):
             system_prompt_template = self.load_system_prompt_template("Report_System", lang=PROMPT_LANG)
 
             system_message = system_prompt_template.format()
+
+            if _mint_flow_session is not None:
+                session_id, _ = _mint_flow_session(system_message.content)
+            else:
+                session_id = str(uuid.uuid4())
             additional_info = f"Report Time: {get_current_time_str()} \n Reporter: ASF CSIRT Team"
             human_message = self.load_human_prompt_template("Report_Human", lang=PROMPT_LANG).format(hunting_objective=hunting_objective,
                                                                                                      findings=findings_str,
