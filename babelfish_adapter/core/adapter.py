@@ -319,6 +319,7 @@ _FLOW_GROUPS = [
             {"name": "intent", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Intent_System.md"},
             {"name": "planner", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Planner_System.md"},
             {"name": "analyst", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Analyst_System.md"},
+            {"name": "analyst_final", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Analyst_Final_System.md"},
             {"name": "report", "prompt_dir": "Case_Threat_Hunting_Agent", "prompt_file": "Report_System.md"},
         ],
     },

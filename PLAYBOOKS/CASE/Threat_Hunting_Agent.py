@@ -241,7 +241,18 @@ class Playbook(LanggraphPlaybook):
         def final_answer_node(state: AnalystState, config: RunnableConfig):
             self.logger.debug("Final Answer Node Invoked")
 
-            session_id = config["configurable"]["session_id"]
+            # Mint a fresh session — final_answer uses a different system
+            # prompt (Analyst_Final_System) than analyst_node (Analyst_System).
+            # Reusing the analyst's session_id would hit holy-grail's
+            # session-conflation guard ("already used with a different
+            # system message").
+            system_prompt_template = self.load_system_prompt_template("Analyst_Final_System", lang=PROMPT_LANG)
+            system_message = system_prompt_template.format()
+
+            if _mint_flow_session is not None:
+                session_id, _ = _mint_flow_session(system_message.content)
+            else:
+                session_id = str(uuid.uuid4())
 
             # handle tool_calls
             tool_calls = []
@@ -262,8 +273,6 @@ class Playbook(LanggraphPlaybook):
             # get answer reasoning
             last_message = state.messages[-1]
 
-            system_prompt_template = self.load_system_prompt_template("Analyst_Final_System", lang=PROMPT_LANG)
-            system_message = system_prompt_template.format()
             human_message = self.load_human_prompt_template("Analyst_Final_Human", lang=PROMPT_LANG).format(
                 question=state.question,
                 content_to_format=last_message.content
@@ -494,7 +503,12 @@ class Playbook(LanggraphPlaybook):
                 configurable={"thread_id": subflow_session_id, "session_id": subflow_session_id},
                 callbacks=sf_cbs,
             )
-            result: dict = self.analyst_graph.invoke(state, subgraph_config)
+            try:
+                result: dict = self.analyst_graph.invoke(state, subgraph_config)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"[subflow:analyst] question='{state.question[:80]}': {exc}"
+                ) from exc
             analyst_state = AnalystState(**result)
             finding = Finding(
                 question=analyst_state.question,
