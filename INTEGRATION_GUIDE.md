@@ -22,7 +22,7 @@ Your project integrates by exposing a **babelfish adapter** — a Python module 
 
 ```
 your_project/
-  babelfish_adapter/
+  babelfish_asp_adapter/
     __init__.py              # triggers bootstrap, re-exports contract functions
     core/                    # BABELFISH LAYER — generic, copy as-is
       __init__.py
@@ -90,7 +90,7 @@ def list_flow_groups() -> list[dict]:
 
 ### 1. Copy `core/context.py`
 
-Copy `babelfish_adapter/core/context.py` into your project unchanged.
+Copy `babelfish_asp_adapter/core/context.py` into your project unchanged.
 
 ### 2. Write `core/adapter.py`
 
@@ -112,7 +112,7 @@ Your LLM factory (wherever you create ChatOpenAI/ChatOllama instances) needs to 
 
 ```python
 try:
-    from babelfish_adapter.core.context import babelfish_context as _babelfish_context
+    from babelfish_asp_adapter.core.context import babelfish_context as _babelfish_context
 except Exception:
     _babelfish_context = None
 
@@ -165,7 +165,7 @@ import uuid
 from langchain_core.runnables import RunnableConfig
 
 try:
-    from babelfish_adapter.core.context import mint_flow_session as _mint_flow_session
+    from babelfish_asp_adapter.core.context import mint_flow_session as _mint_flow_session
 except ImportError:
     _mint_flow_session = None
 
@@ -229,7 +229,7 @@ to its default, so you only need to set the ones you want to override.
 POST /api/flows/register-external
 {
   "name": "your-project-name",
-  "import_path": "babelfish_adapter:run",
+  "import_path": "babelfish_asp_adapter:run",
   "description": "...",
   "execution_timeout_seconds": 300
 }
@@ -256,7 +256,7 @@ lexus-test will call `list_payloads()` and `list_flow_groups()` automatically.
 
 | File | What |
 |------|------|
-| `babelfish_adapter/` | Entire adapter package |
+| `babelfish_asp_adapter/` | Entire adapter package |
 | `PLUGINS/LLM/llmapi.py` | Explicit `session_id` parameter required under adapter context |
 | `AGENTS/agent_siem.py` | `mint_flow_session()` per invocation, session_id threaded through config |
 | `AGENTS/agent_threat_intelligence.py` | `mint_flow_session()` per invocation, session_id threaded through config |

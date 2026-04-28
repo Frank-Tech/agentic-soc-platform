@@ -26,7 +26,7 @@ import os
 import uuid
 from typing import AsyncGenerator, Dict, Type, List, Any
 
-from babelfish_adapter.core.context import babelfish_context
+from babelfish_asp_adapter.core.context import babelfish_context
 
 
 # ╔═══════════════════════════════════════════════════════════════════════════╗
@@ -470,7 +470,7 @@ def list_flow_groups() -> List[Dict]:
     lexus-test uses system_message content as keys in subflow_server_ids,
     enabling per-subflow trace separation. Each subflow entry point mints
     its own UUID4 session_id via ``mint_flow_session()`` (see
-    ``babelfish_adapter/core/context.py``).
+    ``babelfish_asp_adapter/core/context.py``).
     """
     result = []
     for group in _FLOW_GROUPS:

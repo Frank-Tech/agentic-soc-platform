@@ -14,7 +14,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from PLUGINS.LLM.CONFIG import LLM_CONFIGS
 
 try:
-    from babelfish_adapter.core.context import babelfish_context as _babelfish_context
+    from babelfish_asp_adapter.core.context import babelfish_context as _babelfish_context
 except Exception:
     _babelfish_context = None
 
@@ -122,7 +122,7 @@ class LLMAPI(object):
                     "without an explicit session_id. Every flow role (parent flow, "
                     "every subflow) must mint its own UUID4 and pass it explicitly "
                     "to prevent X-Session-ID collisions between concurrent "
-                    "invocations. See babelfish_adapter/core/context.py."
+                    "invocations. See babelfish_asp_adapter/core/context.py."
                 )
             if ctx.get("mode") == "babelfish" and flow_id is None:
                 raise RuntimeError(
@@ -130,7 +130,7 @@ class LLMAPI(object):
                     "without an explicit flow_id. Every flow role must pass the "
                     "flow_id returned by mint_flow_session() — there is no silent "
                     "fallback to the parent's X-Flow-ID. See "
-                    "babelfish_adapter/core/context.py."
+                    "babelfish_asp_adapter/core/context.py."
                 )
             # ─────────────────────────────────────────────────────────────
             # A-design model precedence (lexus-test integration).

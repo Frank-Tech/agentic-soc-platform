@@ -15,7 +15,7 @@ from PLUGINS.LLM.llmapi import LLMAPI
 from PLUGINS.SIEM.tools import SIEMToolKit
 
 try:
-    from babelfish_adapter.core.context import mint_flow_session as _mint_flow_session
+    from babelfish_asp_adapter.core.context import mint_flow_session as _mint_flow_session
 except ImportError:
     _mint_flow_session = None
 

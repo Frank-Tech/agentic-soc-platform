@@ -14,7 +14,7 @@ from PLUGINS.AlienVaultOTX.alienvaultotx import AlienVaultOTX
 from PLUGINS.LLM.llmapi import LLMAPI
 
 try:
-    from babelfish_adapter.core.context import mint_flow_session as _mint_flow_session
+    from babelfish_asp_adapter.core.context import mint_flow_session as _mint_flow_session
 except ImportError:
     _mint_flow_session = None
 

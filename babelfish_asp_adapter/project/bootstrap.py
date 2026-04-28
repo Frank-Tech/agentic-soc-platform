@@ -16,7 +16,7 @@
 #   5. Patches AlienVaultOTX to return safe stub results
 #   6. Maps Langfuse env vars to the format the SDK expects
 #
-# EXECUTION: This module runs at import time (triggered by babelfish_adapter/__init__.py).
+# EXECUTION: This module runs at import time (triggered by babelfish_asp_adapter/__init__.py).
 #            All patching happens BEFORE any playbook/agent code is imported.
 #
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -183,7 +183,7 @@ def _stub_embeddings_qdrant() -> None:
 # from the adapter's registry, and Notice.send to no-op.
 
 def _patch_sirp() -> None:
-    from babelfish_adapter.core.adapter import lookup as _adapter_lookup
+    from babelfish_asp_adapter.core.adapter import lookup as _adapter_lookup
     from PLUGINS.SIRP.sirpbase import BaseWorksheetEntity
 
     @classmethod
