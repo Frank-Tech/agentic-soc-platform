@@ -57,7 +57,7 @@ class _CallbackIsolationHandler(BaseCallbackHandler):
 class BabelfishContextData(TypedDict):
     mode: str                  # "baseline" | "babelfish"
     flow_id: str               # X-Flow-ID header for babelfish routing
-    subflow_server_ids: dict   # system_message_content → msg_hash (identifies tracked subflows)
+    subflow_server_ids: dict   # system_message_content → {"msg_hash": ..., "flow_uuid": ...} (identifies tracked subflows)
     subflow_invocations: list  # accumulator: list[{msg_hash, client_trace_id, server_session_id}]
 
 
@@ -73,8 +73,8 @@ babelfish_context: contextvars.ContextVar[Optional[BabelfishContextData]] = cont
 # below mints fresh UUIDs at every invocation and returns them to the caller,
 # who passes them explicitly to ``LLMAPI.get_model()``.
 
-def _is_tracked_subflow(system_message_content: str) -> str | None:
-    """Return the msg_hash if this system message is a tracked subflow, else None."""
+def _is_tracked_subflow(system_message_content: str) -> dict | None:
+    """Return ``{"msg_hash": ..., "flow_uuid": ...}`` if tracked subflow, else None."""
     ctx = babelfish_context.get()
     if not ctx:
         return None
@@ -109,7 +109,7 @@ def flush_callbacks(callbacks: list) -> None:
                 pass
 
 
-def mint_flow_session(system_message_content: str) -> tuple[str, list]:
+def mint_flow_session(system_message_content: str) -> tuple[str, list, str | None]:
     """Mint a fresh ``session_id`` for one flow role invocation.
 
     Called once per flow entry point: top-level ``adapter.run()`` mints one
@@ -126,10 +126,14 @@ def mint_flow_session(system_message_content: str) -> tuple[str, list]:
     list is empty (the parent's own callbacks come from ``adapter.run()``).
 
     Returns:
-        (session_id, callbacks) — the caller passes ``session_id`` to every
-        ``LLMAPI.get_model`` call in its scope, and threads ``callbacks``
-        into the RunnableConfig for graph invocations so Langfuse traces land
-        on the right client trace id.
+        (session_id, callbacks, flow_id) — the caller passes ``session_id``
+        and ``flow_id`` to every ``LLMAPI.get_model`` call in its scope,
+        and threads ``callbacks`` into the RunnableConfig for graph
+        invocations so Langfuse traces land on the right client trace id.
+        ``flow_id`` is the subflow's own ``flow_uuid`` for tracked subflows,
+        or the parent's ``flow_id`` for parent-flow work (always the value
+        the caller should send as ``X-Flow-ID``). It is ``None`` only when
+        running outside the adapter, where it is not used by ``LLMAPI``.
     """
     session_id = str(_uuid.uuid4())
 
@@ -138,13 +142,18 @@ def mint_flow_session(system_message_content: str) -> tuple[str, list]:
         # Running outside the adapter (tests, CLI). Caller still gets a
         # session_id so the LLM call site has one to pass.
         # Return isolation handler to prevent parent-callback leakage.
-        return session_id, [_CallbackIsolationHandler()]
+        return session_id, [_CallbackIsolationHandler()], None
 
-    msg_hash = _is_tracked_subflow(system_message_content)
-    if not msg_hash:
+    subflow_info = _is_tracked_subflow(system_message_content)
+    if not subflow_info:
         # Parent flow work — the adapter's own callbacks already trace this.
         # Return isolation handler to prevent parent-callback leakage.
-        return session_id, [_CallbackIsolationHandler()]
+        return session_id, [_CallbackIsolationHandler()], parent_ctx["flow_id"]
+
+    # Tracked subflow: both keys are required by contract; missing keys
+    # surface as KeyError rather than silently falling back.
+    msg_hash = subflow_info["msg_hash"]
+    flow_uuid = subflow_info["flow_uuid"]
 
     client_trace_id = str(_uuid.uuid4()).replace("-", "")
     parent_ctx["subflow_invocations"].append({
@@ -153,4 +162,4 @@ def mint_flow_session(system_message_content: str) -> tuple[str, list]:
         "server_session_id": session_id,
     })
     callbacks = _build_subflow_callback(client_trace_id)
-    return session_id, callbacks
+    return session_id, callbacks, flow_uuid

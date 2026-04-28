@@ -117,6 +117,7 @@ class GraphAgent(LanggraphPlaybook):
             self.logger.debug(f"Current messages count: {len(state.messages)}")
 
             session_id = config["configurable"]["session_id"]
+            flow_id = config["configurable"].get("flow_id")
 
             system_message = self._system_prompt_template.format()
 
@@ -125,9 +126,9 @@ class GraphAgent(LanggraphPlaybook):
             messages = [system_message, context_msg, *state.messages]
             self.logger.debug(f"Total messages to send to LLM: {len(messages)}")
 
-            llm_base = self._llm_api.get_model(tag=["fast"], session_id=session_id)
+            llm_base = self._llm_api.get_model(tag=["fast"], session_id=session_id, flow_id=flow_id)
             llm_with_tools = self._llm_api.get_model(
-                tag=["fast", "function_calling"], session_id=session_id
+                tag=["fast", "function_calling"], session_id=session_id, flow_id=flow_id
             ).bind_tools(tools)
 
             if state.loop_count >= state.max_iterations - 1:
@@ -180,12 +181,12 @@ class GraphAgent(LanggraphPlaybook):
         initial_state = AgentState(messages=[HumanMessage(content=query)], loop_count=0, max_iterations=max_iterations)
 
         if _mint_flow_session is not None:
-            session_id, sf_cbs = _mint_flow_session(self._system_prompt_template.format().content)
+            session_id, sf_cbs, sf_flow_id = _mint_flow_session(self._system_prompt_template.format().content)
         else:
-            session_id, sf_cbs = str(uuid.uuid4()), []
+            session_id, sf_cbs, sf_flow_id = str(uuid.uuid4()), [], None
 
         config = RunnableConfig(
-            configurable={"thread_id": session_id, "session_id": session_id},
+            configurable={"thread_id": session_id, "session_id": session_id, "flow_id": sf_flow_id},
             callbacks=sf_cbs,
         )
         self.logger.info(f"Starting graph invocation...")

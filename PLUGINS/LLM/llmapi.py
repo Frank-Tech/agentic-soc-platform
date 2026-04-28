@@ -51,6 +51,7 @@ class LLMAPI(object):
         tag: str | list[str] | None = None,
         *,
         session_id: str | None = None,
+        flow_id: str | None = None,
         **kwargs,
     ) -> ChatOpenAI | ChatOllama:
         """
@@ -123,6 +124,14 @@ class LLMAPI(object):
                     "to prevent X-Session-ID collisions between concurrent "
                     "invocations. See babelfish_adapter/core/context.py."
                 )
+            if ctx.get("mode") == "babelfish" and flow_id is None:
+                raise RuntimeError(
+                    "LLMAPI.get_model() called inside a babelfish adapter context "
+                    "without an explicit flow_id. Every flow role must pass the "
+                    "flow_id returned by mint_flow_session() — there is no silent "
+                    "fallback to the parent's X-Flow-ID. See "
+                    "babelfish_adapter/core/context.py."
+                )
             # ─────────────────────────────────────────────────────────────
             # A-design model precedence (lexus-test integration).
             #
@@ -157,7 +166,7 @@ class LLMAPI(object):
                 params["base_url"] = os.environ["OPENAI_BASE_URL"]
                 params["default_headers"] = {
                     "X-Session-ID": session_id,
-                    "X-Flow-ID": ctx["flow_id"],
+                    "X-Flow-ID": flow_id,
                     "X-Api-Key": os.environ["NEXUS_API_KEY"],
                     "X-Auto-Approve": "true",
                 }

@@ -194,6 +194,7 @@ class Playbook(LanggraphPlaybook):
             self.logger.debug(f"Analyst Node Invoked (Loop: {state.loop_count})")
 
             session_id = config["configurable"]["session_id"]
+            flow_id = config["configurable"].get("flow_id")
 
             system_message = self.load_system_prompt_template("Analyst_System", lang=PROMPT_LANG).format()
             human_message = self.load_human_prompt_template("Analyst_Human", lang=PROMPT_LANG).format(
@@ -215,11 +216,11 @@ class Playbook(LanggraphPlaybook):
 
                 messages.append(HumanMessage(content=stop_instruction))
 
-                base_llm = llm_api.get_model(tag=["powerful"], session_id=session_id)
+                base_llm = llm_api.get_model(tag=["powerful"], session_id=session_id, flow_id=flow_id)
                 response: AIMessage = base_llm.invoke(messages)
             else:
 
-                base_llm = llm_api.get_model(tag=["powerful", "function_calling"], session_id=session_id)
+                base_llm = llm_api.get_model(tag=["powerful", "function_calling"], session_id=session_id, flow_id=flow_id)
                 llm_with_tools = base_llm.bind_tools(tools)
                 response: AIMessage = llm_with_tools.invoke(messages)
 
@@ -250,9 +251,10 @@ class Playbook(LanggraphPlaybook):
             system_message = system_prompt_template.format()
 
             if _mint_flow_session is not None:
-                session_id, _ = _mint_flow_session(system_message.content)
+                session_id, _, flow_id = _mint_flow_session(system_message.content)
             else:
                 session_id = str(uuid.uuid4())
+                flow_id = None
 
             # handle tool_calls
             tool_calls = []
@@ -286,7 +288,7 @@ class Playbook(LanggraphPlaybook):
             ]
 
             llm_api = LLMAPI()
-            formatter_llm = llm_api.get_model(tag=["cheap", "structured_output"], session_id=session_id)
+            formatter_llm = llm_api.get_model(tag=["cheap", "structured_output"], session_id=session_id, flow_id=flow_id)
             structured_llm = formatter_llm.with_structured_output(AnalystOutput)
             response: AnalystOutput = structured_llm.invoke(messages)
 
@@ -346,9 +348,10 @@ class Playbook(LanggraphPlaybook):
             system_message = system_prompt_template.format()
 
             if _mint_flow_session is not None:
-                session_id, _ = _mint_flow_session(system_message.content)
+                session_id, _, flow_id = _mint_flow_session(system_message.content)
             else:
                 session_id = str(uuid.uuid4())
+                flow_id = None
 
             human_message = self.load_human_prompt_template("Intent_Human", lang=PROMPT_LANG).format(case=case.model_dump_json_for_ai(),
                                                                                                      user_intent=user_intent)
@@ -363,7 +366,7 @@ class Playbook(LanggraphPlaybook):
             ]
 
             llm_api = LLMAPI()
-            llm = llm_api.get_model(tag="fast", session_id=session_id)
+            llm = llm_api.get_model(tag="fast", session_id=session_id, flow_id=flow_id)
             response: AIMessage = llm.invoke(messages)
 
             for message in messages:
@@ -403,9 +406,10 @@ class Playbook(LanggraphPlaybook):
             system_message = system_prompt_template.format()
 
             if _mint_flow_session is not None:
-                session_id, _ = _mint_flow_session(system_message.content)
+                session_id, _, flow_id = _mint_flow_session(system_message.content)
             else:
                 session_id = str(uuid.uuid4())
+                flow_id = None
 
             history_md_list = []
             for record in findings:
@@ -424,7 +428,7 @@ class Playbook(LanggraphPlaybook):
             # Run
             llm_api = LLMAPI()
 
-            llm = llm_api.get_model(tag=["powerful", "structured_output"], session_id=session_id)
+            llm = llm_api.get_model(tag=["powerful", "structured_output"], session_id=session_id, flow_id=flow_id)
 
             messages = [
                 system_message,
@@ -495,12 +499,12 @@ class Playbook(LanggraphPlaybook):
 
             if _mint_flow_session is not None:
                 analyst_system_message = self.load_system_prompt_template("Analyst_System", lang=PROMPT_LANG).format().content
-                subflow_session_id, sf_cbs = _mint_flow_session(analyst_system_message)
+                subflow_session_id, sf_cbs, sf_flow_id = _mint_flow_session(analyst_system_message)
             else:
-                subflow_session_id, sf_cbs = str(uuid.uuid4()), []
+                subflow_session_id, sf_cbs, sf_flow_id = str(uuid.uuid4()), [], None
 
             subgraph_config = RunnableConfig(
-                configurable={"thread_id": subflow_session_id, "session_id": subflow_session_id},
+                configurable={"thread_id": subflow_session_id, "session_id": subflow_session_id, "flow_id": sf_flow_id},
                 callbacks=sf_cbs,
             )
             try:
@@ -548,9 +552,10 @@ class Playbook(LanggraphPlaybook):
             system_message = system_prompt_template.format()
 
             if _mint_flow_session is not None:
-                session_id, _ = _mint_flow_session(system_message.content)
+                session_id, _, flow_id = _mint_flow_session(system_message.content)
             else:
                 session_id = str(uuid.uuid4())
+                flow_id = None
             additional_info = f"Report Time: {get_current_time_str()} \n Reporter: ASF CSIRT Team"
             human_message = self.load_human_prompt_template("Report_Human", lang=PROMPT_LANG).format(hunting_objective=hunting_objective,
                                                                                                      findings=findings_str,
@@ -567,7 +572,7 @@ class Playbook(LanggraphPlaybook):
             ]
 
             llm_api = LLMAPI()
-            llm = llm_api.get_model(tag=["powerful"], session_id=session_id)
+            llm = llm_api.get_model(tag=["powerful"], session_id=session_id, flow_id=flow_id)
             response = llm.invoke(messages)
 
             case_new = CaseModel(rowid=self.param_source_rowid, threat_hunting_report_ai=response.content)
