@@ -429,8 +429,13 @@ async def execute_flow(
         playbook = PlaybookClass()
         playbook._playbook_model = playbook_model
 
+        ctx = babelfish_context.get()
         config = RunnableConfig(
-            configurable={"thread_id": session_id, "session_id": session_id},
+            configurable={
+                "thread_id": session_id,
+                "session_id": session_id,
+                "flow_id": ctx["flow_id"] if ctx else None,
+            },
             callbacks=callbacks,
         )
 

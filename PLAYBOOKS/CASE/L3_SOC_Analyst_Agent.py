@@ -49,6 +49,7 @@ class Playbook(LanggraphPlaybook):
             """AI analyzes Case data"""
 
             session_id = config["configurable"]["session_id"]
+            flow_id = config["configurable"].get("flow_id")
 
             # Load system prompt
             system_prompt_template = self.load_system_prompt_template("L3_SOC_Analyst")
@@ -62,7 +63,7 @@ class Playbook(LanggraphPlaybook):
             # Run
             llm_api = LLMAPI()
 
-            llm = llm_api.get_model(tag="structured_output", session_id=session_id)
+            llm = llm_api.get_model(tag="structured_output", session_id=session_id, flow_id=flow_id)
 
             # Construct message list
             messages = [

@@ -108,12 +108,13 @@ class Playbook(LanggraphPlaybook):
 
         def analyze_node(state: AgentState, config):
             session_id = config["configurable"]["session_id"]
+            flow_id = config["configurable"].get("flow_id")
 
             system_prompt_template = self.load_system_prompt_template("L3_SOC_Analyst")
             system_message = system_prompt_template.format()
 
             llm_api = LLMAPI()
-            llm = llm_api.get_model(tag=["structured_output", "function_calling"], session_id=session_id)
+            llm = llm_api.get_model(tag=["structured_output", "function_calling"], session_id=session_id, flow_id=flow_id)
             llm_with_tools = llm.bind_tools([*tools, AnalyzeResult])
 
             messages = [system_message] + state.messages
