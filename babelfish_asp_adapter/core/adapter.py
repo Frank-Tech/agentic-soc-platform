@@ -113,13 +113,48 @@ async def run(
     )
 
     try:
-        # ── This is the only line that calls your project's code ──
+        # ── Stream events and extract tool calls ─────────────────────
+        # The adapter owns event parsing. LangGraph yields
+        # {node: {"messages": [AIMessage, ToolMessage, ...]}} — we
+        # extract tool_call_groups/tool_outputs/errored_call_ids and
+        # report them via __tool_calls__ so the runner is format-agnostic.
+        from langchain_core.messages import AIMessage, ToolMessage
+
+        tool_call_groups: list[list[tuple[str, str]]] = []
+        tool_outputs: dict[str, object] = {}
+        errored_call_ids: set[str] = set()
+
         async for step in execute_flow(
             payload_name=payload_name,
             session_id=parent_session_id,
             callbacks=callbacks,
         ):
+            # Parse LangGraph-style events
+            if isinstance(step, dict):
+                for _node, update in step.items():
+                    if not isinstance(update, dict) or "messages" not in update:
+                        continue
+                    msgs = update["messages"]
+                    if not isinstance(msgs, list):
+                        msgs = [msgs]
+                    for msg in msgs:
+                        if isinstance(msg, AIMessage) and msg.tool_calls:
+                            group = [(tc["id"], tc["name"]) for tc in msg.tool_calls]
+                            tool_call_groups.append(group)
+                        elif isinstance(msg, ToolMessage):
+                            tool_outputs[msg.tool_call_id] = msg.content
+                            if msg.status == "error":
+                                errored_call_ids.add(msg.tool_call_id)
             yield step
+
+        # Report extracted tool calls to the runner
+        yield {
+            "__tool_calls__": {
+                "tool_call_groups": tool_call_groups,
+                "tool_outputs": tool_outputs,
+                "errored_call_ids": list(errored_call_ids),
+            }
+        }
 
         actual_trace_id = (
             main_handler.last_trace_id if main_handler and main_handler.last_trace_id
